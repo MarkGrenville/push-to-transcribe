@@ -6,8 +6,13 @@ class WhisperClient {
     private let apiURL = "https://api.openai.com/v1/audio/transcriptions"
     private var accumulatedTranscript = ""
     private var audioBuffer = Data()
-    private let minBufferSize = 16384 // Minimum buffer size before sending to API
+    private let minBufferSize = 16384 // Reduced from 32768 - faster response (~0.5 seconds of 16kHz 16-bit audio)
+    private let streamingBufferSize = 8192 // Even smaller chunks for streaming (~0.25 seconds)
     private weak var settingsManager: SettingsManager?
+    private var isStreaming = false
+    
+    // Callback for streaming transcription results
+    var onStreamingTranscript: ((String) -> Void)?
     
     init(apiKey: String, settingsManager: SettingsManager) {
         self.apiKey = apiKey
@@ -17,8 +22,10 @@ class WhisperClient {
     func transcribeAudio(audioData: Data) {
         audioBuffer.append(audioData)
         
-        // Send audio chunks when buffer reaches minimum size
-        if audioBuffer.count >= minBufferSize {
+        // For better responsiveness, send smaller chunks more frequently
+        if audioBuffer.count >= streamingBufferSize {
+            let durationSeconds = Double(audioBuffer.count) / (16000.0 * 2.0) // 16kHz, 16-bit (2 bytes)
+            print("🎵 Sending \(audioBuffer.count) bytes (~\(String(format: "%.2f", durationSeconds))s) to transcription API")
             sendAudioToWhisper(audioData: audioBuffer)
             audioBuffer.removeAll()
         }
@@ -135,6 +142,10 @@ class WhisperClient {
                 DispatchQueue.main.async { [weak self] in
                     self?.accumulatedTranscript += text + " "
                     print("Transcription: \(text)")
+                    
+                    // Call streaming callback with partial results
+                    let currentTranscript = self?.accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    self?.onStreamingTranscript?(currentTranscript)
                 }
             }
         } catch {

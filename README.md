@@ -121,10 +121,11 @@ The app includes a comprehensive settings window with three tabs:
 
 1. **Audio Recording**: Uses AVAudioEngine to capture real-time audio from the microphone
 2. **Hotkey Detection**: Monitors configurable global hotkeys using Carbon API for reliability
-3. **Audio Processing**: Converts audio to 16kHz mono PCM format for optimal API compatibility
-4. **AI Transcription**: Sends audio chunks to your chosen model (Whisper-1 or GPT-4o Audio)
-5. **Text Accumulation**: Combines transcription results into a final transcript
-6. **Smart Auto-paste**: Copies text to clipboard and intelligently pastes with proper timing
+3. **Audio Processing**: Properly converts audio using AVAudioConverter from input format (48kHz) to 16kHz mono PCM
+4. **Quality Control**: Uses larger buffers (4096 samples) and proper resampling for high-quality audio
+5. **AI Transcription**: Sends 1-second audio chunks to your chosen model (Whisper-1 or GPT-4o Transcribe)
+6. **Text Accumulation**: Combines transcription results into a final transcript
+7. **Smart Auto-paste**: Copies text to clipboard and intelligently pastes with proper timing
 
 ## Architecture
 

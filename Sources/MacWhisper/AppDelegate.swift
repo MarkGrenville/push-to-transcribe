@@ -50,11 +50,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func updateMenuBarIcon(isRecording: Bool) {
+        updateMenuBarIcon(isRecording: isRecording, isTranscribing: false)
+    }
+    
+    private func updateMenuBarIcon(isRecording: Bool, isTranscribing: Bool) {
         DispatchQueue.main.async { [weak self] in
             if isRecording {
                 self?.statusItem.button?.title = "🔴"
                 self?.statusItem.button?.toolTip = "Mac Whisper - Recording... (Release Control+Space to stop)"
                 self?.statusMenuItem.title = "Status: 🔴 Recording..."
+            } else if isTranscribing {
+                self?.statusItem.button?.title = "🟠"
+                self?.statusItem.button?.toolTip = "Mac Whisper - Transcribing audio..."
+                self?.statusMenuItem.title = "Status: 🟠 Transcribing..."
             } else {
                 self?.statusItem.button?.title = "🎤"
                 self?.statusItem.button?.toolTip = "Mac Whisper - Voice Transcription (Hold Control+Space to record)"
@@ -91,6 +99,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.processAudioData(audioData)
         }
         
+        // Setup streaming transcription callback for real-time feedback
+        whisperClient.onStreamingTranscript = { [weak self] partialTranscript in
+            self?.updateMenuBarWithPartialTranscript(partialTranscript)
+        }
+        
         // Listen for hotkey changes
         settingsManager.hotkeyChanged = { [weak self] in
             self?.hotkeyManager.updateHotkey()
@@ -119,41 +132,79 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func startRecording() {
         print("Starting recording...")
+        
+        // Store the currently focused app before recording starts
+        clipboardUtils.storeCurrentFocusedApp()
+        
         updateMenuBarIcon(isRecording: true)
         audioManager.startRecording()
     }
     
     private func stopRecording() {
         print("Stopping recording...")
-        updateMenuBarIcon(isRecording: false)
+        updateMenuBarIcon(isRecording: false, isTranscribing: true)
         audioManager.stopRecording()
         
-        // Finalize transcript and paste
-        let finalTranscript = whisperClient.getFinalTranscript()
-        if !finalTranscript.isEmpty {
-            print("📝 Transcription: \(finalTranscript)")
-            
-            // Store last transcription and add to history
-            lastTranscription = finalTranscript
-            updateLastTranscriptionMenuItem()
-            settingsManager.addTranscription(finalTranscript)
-            
-            clipboardUtils.copyToClipboard(text: finalTranscript)
-            
-            if settingsManager.autoPaste {
-                clipboardUtils.simulatePasteKeystroke()
-            }
-            
-            // Show notification with the transcribed text
-            if settingsManager.showNotifications {
-                showTranscriptionNotification(text: finalTranscript)
-            }
-        } else {
-            print("⚠️ No transcription received")
+        // Get the current transcript immediately
+        let currentTranscript = whisperClient.getFinalTranscript()
+        if !currentTranscript.isEmpty {
+            // Add to history immediately
+            addTranscriptionToHistory(currentTranscript)
         }
         
-        // Clear transcript for next recording
-        whisperClient.clearTranscript()
+        // Add a small delay to ensure final audio chunks are processed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            // Finalize transcript and paste
+            let finalTranscript = self?.whisperClient.getFinalTranscript() ?? ""
+            if !finalTranscript.isEmpty {
+                print("📝 Transcription: \(finalTranscript)")
+                
+                // Update history again with final result (in case it changed)
+                self?.addTranscriptionToHistory(finalTranscript)
+                
+                self?.clipboardUtils.copyToClipboard(text: finalTranscript)
+                
+                if self?.settingsManager.autoPaste == true {
+                    self?.clipboardUtils.simulatePasteKeystroke()
+                }
+                
+                // Show notification with the transcribed text
+                if self?.settingsManager.showNotifications == true {
+                    self?.showTranscriptionNotification(text: finalTranscript)
+                }
+            } else {
+                print("⚠️ No transcription received")
+            }
+            
+            // Clear transcript for next recording and return to ready state
+            self?.whisperClient.clearTranscript()
+            self?.updateMenuBarIcon(isRecording: false, isTranscribing: false)
+        }
+    }
+    
+    private func addTranscriptionToHistory(_ text: String) {
+        // Only add if it's meaningful (not empty and not just whitespace)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedText.isEmpty || trimmedText.count < 3 {
+            return
+        }
+        
+        // Check if this is a duplicate or just an extension of the most recent entry
+        if let mostRecent = settingsManager.transcriptionHistory.first {
+            // If the new text is contained in the most recent entry, don't add it
+            if mostRecent.text.contains(trimmedText) {
+                return
+            }
+            // If the new text contains the most recent entry, replace it
+            if trimmedText.contains(mostRecent.text) {
+                settingsManager.transcriptionHistory.removeFirst()
+            }
+        }
+        
+        lastTranscription = trimmedText
+        updateLastTranscriptionMenuItem()
+        settingsManager.addTranscription(trimmedText)
+        print("📚 Added to history: \(trimmedText)")
     }
     
     private func showTranscriptionNotification(text: String) {
@@ -167,6 +218,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func processAudioData(_ audioData: Data) {
         whisperClient.transcribeAudio(audioData: audioData)
+    }
+    
+    private func updateMenuBarWithPartialTranscript(_ partialTranscript: String) {
+        DispatchQueue.main.async { [weak self] in
+            // Show partial transcript in menu status while transcribing
+            let truncatedTranscript = partialTranscript.count > 50 ? String(partialTranscript.prefix(50)) + "..." : partialTranscript
+            self?.statusItem.button?.title = "🟠"
+            self?.statusItem.button?.toolTip = "Mac Whisper - Transcribing: \(truncatedTranscript)"
+            self?.statusMenuItem.title = "Status: 🟠 Transcribing... \"\(truncatedTranscript)\""
+        }
     }
     
     @objc private func showAbout() {

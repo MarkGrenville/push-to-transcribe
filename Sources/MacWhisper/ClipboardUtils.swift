@@ -4,9 +4,16 @@ import CoreGraphics
 
 class ClipboardUtils {
     private weak var settingsManager: SettingsManager?
+    private var originalFocusedApp: NSRunningApplication?
     
     init(settingsManager: SettingsManager) {
         self.settingsManager = settingsManager
+    }
+    
+    // Store the currently focused app before recording starts
+    func storeCurrentFocusedApp() {
+        originalFocusedApp = NSWorkspace.shared.frontmostApplication
+        print("📱 Stored focused app: \(originalFocusedApp?.localizedName ?? "Unknown")")
     }
     
     func copyToClipboard(text: String) {
@@ -17,19 +24,32 @@ class ClipboardUtils {
     }
     
     func simulatePasteKeystroke() {
-        // Longer delay to ensure the app gets focus back after recording stops
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            // Get the currently focused app
-            let frontApp = NSWorkspace.shared.frontmostApplication
-            print("🎯 Attempting to paste into: \(frontApp?.localizedName ?? "Unknown app")")
+        // First ensure the original app gets focus back
+        if let originalApp = originalFocusedApp {
+            print("🔄 Restoring focus to: \(originalApp.localizedName ?? "Unknown")")
+            originalApp.activate(options: [.activateIgnoringOtherApps])
             
-            // Try CGEvent method first
-            if !self.performPasteKeystroke() {
-                print("⚠️ CGEvent paste failed, trying AppleScript...")
-                // Fallback to AppleScript method with additional delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    self.pasteUsingAppleScript()
-                }
+            // Give the app time to regain focus, then paste
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.performPasteWithRetry()
+            }
+        } else {
+            // Fallback: wait longer and try pasting
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                self.performPasteWithRetry()
+            }
+        }
+    }
+    
+    private func performPasteWithRetry() {
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        print("🎯 Attempting to paste into: \(frontApp?.localizedName ?? "Unknown app")")
+        
+        // Try multiple paste methods with retry
+        if !performPasteKeystroke() {
+            print("⚠️ CGEvent paste failed, trying AppleScript...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.pasteUsingAppleScript()
             }
         }
     }
