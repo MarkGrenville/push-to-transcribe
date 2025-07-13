@@ -1,16 +1,16 @@
 version: "Apple Swift version 6.1.2 (swiftlang-6.1.2.1.2 clang-1700.0.13.5)"
 options: "a4b18fe4deffe11955aaa62c8c54093dd11eca4020d35c1db25e66cce37ca1fb"
-build_start_time: [1752423195, 575338000]
-build_end_time: [1752423197, 721557000]
+build_start_time: [1752427801, 170369000]
+build_end_time: [1752427803, 305934000]
 inputs:
   ? "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift"
   : [1752419520, 251387678]
-  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift": [1752423184, 274006190]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift": [1752427775, 340585286]
   "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AudioRecordingManager.swift": [1752422042, 633156768]
-  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift": [1752422503, 984041232]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift": [1752427692, 584188275]
   "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift": [1752421646, 389591848]
-  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift": [1752421106, 259515976]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift": [1752427733, 88321812]
   "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift": [1752421800, 146534042]
   "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift": [1752421790, 125433131]
-  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift": [1752423170, 86930669]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift": [1752426213, 162937070]
   "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift": [1752419089, 321747403]

@@ -57,6 +57,14 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift"
         },
         {
@@ -89,6 +97,8 @@
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/ClipboardUtils.swift.o",
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/HotkeyManager.swift.o",
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView.swift.o",
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.swift.o",
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/main.swift.o",
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/resource_bundle_accessor.swift.o"
@@ -166,6 +176,14 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.swift.o"
         },
         {
@@ -188,6 +206,8 @@
         "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift",
         "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift",
         "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift",
         "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift",
         "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift",
         "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift"
@@ -211,6 +231,8 @@
       "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift",
       "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift",
       "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift",
       "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift",
       "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift",
       "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift",
@@ -325,6 +347,14 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift"
         },
         {
@@ -364,6 +394,14 @@
         {
           "kind" : "file",
           "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView.swift.o"
         },
         {
           "kind" : "file",

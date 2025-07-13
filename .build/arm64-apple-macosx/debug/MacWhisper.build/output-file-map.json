@@ -32,6 +32,18 @@
     "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager~partial.swiftmodule",
     "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager.swiftdeps"
   },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsManager.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/SettingsView.swiftdeps"
+  },
   "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift": {
     "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.d",
     "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.swift.o",

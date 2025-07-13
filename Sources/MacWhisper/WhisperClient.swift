@@ -73,7 +73,10 @@ class WhisperClient {
                 print("Response status: \(httpResponse.statusCode)")
             }
             
-            self?.handleTranscriptionResponse(data: data)
+            // Handle the response on a background thread to avoid main thread blocking
+            DispatchQueue.global(qos: .userInitiated).async {
+                self?.handleTranscriptionResponse(data: data)
+            }
         }.resume()
     }
     
@@ -149,26 +152,19 @@ class WhisperClient {
             if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
                let text = json["text"] as? String {
                 
-                DispatchQueue.main.async { [weak self] in
-                    // Set the complete transcript (not accumulating chunks anymore)
-                    self?.accumulatedTranscript = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    print("📝 Transcription complete: \(text)")
-                    
-                    // Call completion callback with final result
-                    self?.onTranscriptionComplete?(self?.accumulatedTranscript ?? "")
+                let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                print("Transcription received: \(cleanText)")
+                
+                // Update using the existing callback mechanism on main thread
+                DispatchQueue.main.async {
+                    self.onTranscriptionComplete?(cleanText)
                 }
             }
         } catch {
-            print("Failed to parse JSON: \(error)")
-            
-            // Print raw response for debugging
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("Raw response: \(responseString)")
-            }
-            
-            // Call completion callback with empty result on error
-            DispatchQueue.main.async { [weak self] in
-                self?.onTranscriptionComplete?("")
+            print("Error parsing transcription response: \(error)")
+            // Handle error on main thread
+            DispatchQueue.main.async {
+                self.onTranscriptionComplete?("")
             }
         }
     }

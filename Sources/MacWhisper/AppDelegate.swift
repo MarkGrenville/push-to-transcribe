@@ -24,27 +24,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func setupStatusBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        updateMenuBarIcon(isRecording: false)
+        statusItem.button?.title = "🎤"
+        statusItem.button?.toolTip = "Mac Whisper - Voice Transcription (Hold Control+Space to record)"
         
         let menu = NSMenu()
         
-        statusMenuItem = NSMenuItem(title: "Status: Ready", action: nil, keyEquivalent: "")
+        statusMenuItem = NSMenuItem(title: "Status: 🎤 Ready", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
+        
         menu.addItem(NSMenuItem.separator())
         
-        lastTranscriptionMenuItem = NSMenuItem(title: "Last: (none)", action: #selector(copyLastTranscription), keyEquivalent: "")
-        lastTranscriptionMenuItem.isEnabled = false
+        lastTranscriptionMenuItem = NSMenuItem(title: "No transcription yet", action: #selector(copyLastTranscription), keyEquivalent: "")
         menu.addItem(lastTranscriptionMenuItem)
+        
         menu.addItem(NSMenuItem.separator())
+        
+        // Add manual test option for debugging
+        menu.addItem(NSMenuItem(title: "🧪 Test Paste Function", action: #selector(testPasteFunction), keyEquivalent: ""))
         
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "📋 Check Permissions", action: #selector(checkPermissions), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Request Permissions", action: #selector(requestPermissions), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "About Mac Whisper", action: #selector(showAbout), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Request Permissions", action: #selector(requestPermissions), keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         
         statusItem.menu = menu
     }
@@ -78,7 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         permissionManager = PermissionManager()
         audioManager = AudioRecordingManager()
         whisperClient = WhisperClient(apiKey: "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", settingsManager: settingsManager)
-        clipboardUtils = ClipboardUtils(settingsManager: settingsManager)
+        clipboardUtils = ClipboardUtils()
         
         // Check permissions before setting up hotkeys
         checkPermissionsOnStartup()
@@ -102,6 +106,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Setup transcription completion callback
         whisperClient.onTranscriptionComplete = { [weak self] finalTranscript in
+            print("📋 GOT TRANSCRIPT: \(finalTranscript)")
             self?.handleTranscriptionComplete(finalTranscript)
         }
         
@@ -132,9 +137,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func startRecording() {
-        print("Starting recording...")
+        print("🎤 Starting recording...")
         
         // Store the currently focused app before recording starts
+        print("📱 Storing current focused app...")
         clipboardUtils.storeCurrentFocusedApp()
         
         updateMenuBarIcon(isRecording: true)
@@ -185,33 +191,86 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         NSUserNotificationCenter.default.deliver(notification)
     }
+
+    func showNotification(title: String, body: String) {
+        // Dispatch to background thread to avoid main thread blocking
+        DispatchQueue.global(qos: .userInitiated).async {
+            let notification = NSUserNotification()
+            notification.title = title
+            notification.informativeText = body
+            notification.soundName = nil
+            
+            // Post notification on main thread
+            DispatchQueue.main.async {
+                NSUserNotificationCenter.default.deliver(notification)
+            }
+        }
+    }
     
     private func handleTranscriptionComplete(_ finalTranscript: String) {
         let trimmedTranscript = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        if !trimmedTranscript.isEmpty {
-            print("📝 Transcription complete: \(trimmedTranscript)")
-            
-            // Add to history immediately
-            addTranscriptionToHistory(trimmedTranscript)
-            
-            // Copy to clipboard
-            clipboardUtils.copyToClipboard(text: trimmedTranscript)
-            
-            if settingsManager.autoPaste == true {
-                clipboardUtils.simulatePasteKeystroke()
-            }
-            
-            // Show notification with the transcribed text
-            if settingsManager.showNotifications == true {
-                showTranscriptionNotification(text: trimmedTranscript)
-            }
-        } else {
-            print("⚠️ No transcription received")
+        print("🎤 Final transcript: \(trimmedTranscript)")
+        
+        // Update UI on main thread
+        DispatchQueue.main.async {
+            self.updateMenuBarIcon(isRecording: false, isTranscribing: false)
         }
         
-        // Always return to ready state
-        updateMenuBarIcon(isRecording: false, isTranscribing: false)
+        // Add to history
+        if !trimmedTranscript.isEmpty {
+            settingsManager.addTranscription(trimmedTranscript)
+            
+            // Update menu to show latest transcription
+            updateLastTranscriptionMenuItem()
+            
+            // Check if auto-paste is enabled
+            if settingsManager.autoPaste {
+                // Check accessibility permission before attempting auto-paste
+                if permissionManager.checkAccessibilityPermission() {
+                    // Use the new automatic paste approach:
+                    // 1. Set clipboard text
+                    // 2. Wait 0.3 seconds  
+                    // 3. Try multiple paste methods for reliability
+                    clipboardUtils.pasteTextAutomatically(text: trimmedTranscript)
+                    
+                    // Show notification that text was pasted
+                    self.showSimpleNotification(title: "✅ Transcription Auto-Pasted", 
+                                              body: "Attempted auto-paste: \(trimmedTranscript)")
+                } else {
+                    // No accessibility permission - just copy to clipboard
+                    DispatchQueue.main.async {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.setString(trimmedTranscript, forType: .string)
+                        
+                        // Show notification with permission reminder
+                        self.showSimpleNotification(title: "📋 Transcription Ready", 
+                                                  body: "Copied to clipboard. Grant Accessibility permission for auto-paste: \(trimmedTranscript)")
+                    }
+                }
+            } else {
+                // Just copy to clipboard without auto-pasting
+                DispatchQueue.main.async {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(trimmedTranscript, forType: .string)
+                    
+                    // Show notification with instruction
+                    self.showSimpleNotification(title: "✅ Transcription Ready", 
+                                              body: "Copied to clipboard. Press Cmd+V to paste: \(trimmedTranscript)")
+                }
+            }
+        }
+    }
+    
+    private func showSimpleNotification(title: String, body: String) {
+        let notification = NSUserNotification()
+        notification.title = title
+        notification.informativeText = body
+        notification.soundName = NSUserNotificationDefaultSoundName // Add sound for better UX
+        
+        NSUserNotificationCenter.default.deliver(notification)
     }
     
     @objc private func showAbout() {
@@ -249,25 +308,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         permissionManager.requestAccessibilityPermission()
     }
     
+    @objc private func checkPermissions() {
+        permissionManager.showPermissionStatus()
+    }
+    
     @objc private func copyLastTranscription() {
-        if !lastTranscription.isEmpty {
-            clipboardUtils.copyToClipboard(text: lastTranscription)
-            print("📋 Copied last transcription to clipboard")
-        }
+        guard let recent = settingsManager.transcriptionHistory.first else { return }
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(recent.text, forType: .string)
+        
+        showSimpleNotification(title: "📋 Copied!", body: "Transcription copied to clipboard")
+    }
+    
+    @objc private func testPasteFunction() {
+        print("🧪 Manual paste test triggered from menu")
+        clipboardUtils.pasteTextAutomatically(text: "Test paste - MacWhisper working!")
     }
     
     private func updateLastTranscriptionMenuItem() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            if self.lastTranscription.isEmpty {
-                self.lastTranscriptionMenuItem.title = "Last: (none)"
+        DispatchQueue.main.async {
+            if self.settingsManager.transcriptionHistory.isEmpty {
+                self.lastTranscriptionMenuItem.title = "📋 Last: (none)"
                 self.lastTranscriptionMenuItem.isEnabled = false
             } else {
-                let preview = self.lastTranscription.count > 30 ? 
-                    String(self.lastTranscription.prefix(30)) + "..." : 
-                    self.lastTranscription
-                self.lastTranscriptionMenuItem.title = "Last: \(preview)"
+                let recent = self.settingsManager.transcriptionHistory[0]
+                let preview = recent.text.count > 40 ? String(recent.text.prefix(40)) + "..." : recent.text
+                self.lastTranscriptionMenuItem.title = "📋 Last: \(preview)"
                 self.lastTranscriptionMenuItem.isEnabled = true
             }
         }

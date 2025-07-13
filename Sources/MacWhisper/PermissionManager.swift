@@ -39,20 +39,31 @@ class PermissionManager {
         
         if trusted {
             print("✅ Accessibility permission already granted")
-        } else {
-            print("❌ Accessibility permission required for global hotkeys")
-            print("Requesting accessibility permission...")
-            
-            // Request accessibility permission
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-            let accessEnabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
-            
-            if !accessEnabled {
-                showAccessibilityPermissionAlert()
-            } else {
-                print("✅ Accessibility permission granted!")
-            }
+            return
         }
+        
+        print("❌ Accessibility permission required for global hotkeys and auto-paste")
+        print("Requesting accessibility permission...")
+        
+        // Request accessibility permission with prompt
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        let accessEnabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        
+        if !accessEnabled {
+            print("⚠️ User needs to manually grant accessibility permission")
+            showAccessibilityPermissionAlert()
+        } else {
+            print("✅ Accessibility permission granted!")
+        }
+    }
+    
+    func forceRequestAccessibilityPermission() {
+        // Force show the system permission dialog
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        let _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        
+        // Also show our custom alert with instructions
+        showAccessibilityPermissionAlert()
     }
     
     private func showMicrophonePermissionAlert() {
@@ -73,20 +84,47 @@ class PermissionManager {
     private func showAccessibilityPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
-        alert.informativeText = "Mac Whisper needs accessibility permission to:\n• Monitor global hotkeys (Control + Space)\n• Simulate keystroke events (Cmd + V for pasting)\n\nPlease grant permission in System Preferences > Security & Privacy > Accessibility."
+        alert.informativeText = """
+        Mac Whisper needs accessibility permission to:
+        • Monitor global hotkeys (Control + Space)
+        • Automatically paste transcribed text (Cmd + V simulation)
+        • Use Apple Events for text input
+        
+        🔧 How to grant permission:
+        1. Open System Preferences > Security & Privacy > Privacy
+        2. Select "Accessibility" from the left sidebar
+        3. Click the lock icon and enter your password
+        4. Find "MacWhisper" in the list and check the box ✅
+        5. If MacWhisper isn't in the list, click "+" and add it
+        
+        ⚠️ Important: Restart MacWhisper after granting permission!
+        """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Preferences")
+        alert.addButton(withTitle: "Try Again")
         alert.addButton(withTitle: "Cancel")
         
         let response = alert.runModal()
         
         if response == .alertFirstButtonReturn {
             openSystemPreferences(pane: "com.apple.preference.security")
+        } else if response == .alertSecondButtonReturn {
+            // Try to request permission again
+            forceRequestAccessibilityPermission()
         }
     }
     
     private func openSystemPreferences(pane: String) {
-        let url = URL(string: "x-apple.systempreferences:\(pane)?Privacy")!
+        // Try new System Settings first (macOS 13+)
+        if #available(macOS 13.0, *) {
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+            if NSWorkspace.shared.open(url) {
+                return
+            }
+        }
+        
+        // Fallback to old System Preferences
+        let url = URL(string: "x-apple.systempreferences:\(pane)?Privacy_Accessibility")!
         NSWorkspace.shared.open(url)
     }
     
@@ -119,8 +157,21 @@ class PermissionManager {
         Accessibility: \(accessibilityPermission)
         
         Both permissions are required for Mac Whisper to function properly.
+        
+        💡 Auto-paste functionality specifically requires Accessibility permission.
         """
         alert.alertStyle = .informational
-        alert.runModal()
+        
+        if !checkAccessibilityPermission() {
+            alert.addButton(withTitle: "Request Accessibility Permission")
+            alert.addButton(withTitle: "OK")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                forceRequestAccessibilityPermission()
+            }
+        } else {
+            alert.runModal()
+        }
     }
 } 
