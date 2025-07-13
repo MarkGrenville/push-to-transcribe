@@ -1,0 +1,414 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+    "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper_MacWhisper.bundle/MacWhisper.entitlements" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/Resources/MacWhisper.entitlements"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper_MacWhisper.bundle/MacWhisper.entitlements"
+        }
+      ]
+    }
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.MacWhisper-arm64-apple-macosx15.0-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/sources",
+      "importPath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AudioRecordingManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<MacWhisper-arm64-apple-macosx15.0-release.module-resources>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "MacWhisper",
+      "moduleOutputPath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/Modules/MacWhisper.swiftmodule",
+      "objects" : [
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/AppDelegate.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/AudioRecordingManager.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/ClipboardUtils.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/HotkeyManager.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/PermissionManager.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/SettingsManager.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/SettingsView.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/WhisperClient.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/main.swift.o",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/resource_bundle_accessor.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx11.0",
+        "-O",
+        "-j12",
+        "-DSWIFT_PACKAGE",
+        "-module-cache-path",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "MacWhisper_main",
+        "-color-diagnostics",
+        "-swift-version",
+        "5",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g"
+      ],
+      "outputFileMapPath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/AudioRecordingManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/ClipboardUtils.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/HotkeyManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/PermissionManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/SettingsManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/SettingsView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/WhisperClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/main.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/resource_bundle_accessor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/Modules/MacWhisper.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AudioRecordingManager.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift",
+        "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift",
+        "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift"
+      ],
+      "tempsPath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build",
+      "wholeModuleOptimization" : true
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "MacWhisper" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "MacWhisper",
+      "-whole-module-optimization",
+      "-num-threads",
+      "12",
+      "-c",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AudioRecordingManager.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift",
+      "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift",
+      "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift",
+      "-I",
+      "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx11.0",
+      "-O",
+      "-j12",
+      "-DSWIFT_PACKAGE",
+      "-module-cache-path",
+      "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "MacWhisper_main",
+      "-color-diagnostics",
+      "-swift-version",
+      "5",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "MacWhisper" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "enableAllTraits" : false
+  },
+  "writeCommands" : {
+    "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AudioRecordingManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsManager.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/SettingsView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/sources"
+    },
+    "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/AudioRecordingManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/ClipboardUtils.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/HotkeyManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/PermissionManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/SettingsManager.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/SettingsView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/WhisperClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/main.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.build/resource_bundle_accessor.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/MacWhisper.product/Objects.LinkFileList"
+    },
+    "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

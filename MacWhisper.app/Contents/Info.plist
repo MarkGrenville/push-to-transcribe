@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>MacWhisper</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.macwhisper</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>MacWhisper</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MacWhisper needs access to your microphone to record audio for real-time transcription using the OpenAI Whisper API.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>MacWhisper needs to send Apple Events to simulate keystroke events for pasting transcribed text.</string>
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>MacWhisper needs system administration access to monitor global hotkeys and simulate keystroke events.</string>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+    <key>CFBundleDisplayName</key>
+    <string>MacWhisper</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2024. All rights reserved.</string>
+</dict>
+</plist> 

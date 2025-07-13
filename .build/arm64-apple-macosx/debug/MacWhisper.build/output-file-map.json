@@ -1,0 +1,53 @@
+{
+  "": {
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/master.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AppDelegate.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AppDelegate.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AppDelegate.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AppDelegate~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AppDelegate.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/AudioRecordingManager.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AudioRecordingManager.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AudioRecordingManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AudioRecordingManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/AudioRecordingManager.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/ClipboardUtils.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/ClipboardUtils.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/ClipboardUtils.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/ClipboardUtils~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/ClipboardUtils.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/HotkeyManager.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/HotkeyManager.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/HotkeyManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/HotkeyManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/HotkeyManager.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/PermissionManager.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/PermissionManager.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/WhisperClient.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/WhisperClient.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/Sources/MacWhisper/main.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/main.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/main.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/main.swiftdeps"
+  },
+  "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/DerivedSources/resource_bundle_accessor.swift": {
+    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/resource_bundle_accessor.d",
+    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/debug/MacWhisper.build/resource_bundle_accessor.swiftdeps"
+  }
+}
