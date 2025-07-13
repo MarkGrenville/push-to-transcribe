@@ -6,29 +6,39 @@ class WhisperClient {
     private let apiURL = "https://api.openai.com/v1/audio/transcriptions"
     private var accumulatedTranscript = ""
     private var audioBuffer = Data()
-    private let minBufferSize = 16384 // Reduced from 32768 - faster response (~0.5 seconds of 16kHz 16-bit audio)
-    private let streamingBufferSize = 8192 // Even smaller chunks for streaming (~0.25 seconds)
     private weak var settingsManager: SettingsManager?
-    private var isStreaming = false
     
-    // Callback for streaming transcription results
-    var onStreamingTranscript: ((String) -> Void)?
+    // Callback for when transcription is complete
+    var onTranscriptionComplete: ((String) -> Void)?
     
     init(apiKey: String, settingsManager: SettingsManager) {
         self.apiKey = apiKey
         self.settingsManager = settingsManager
     }
     
-    func transcribeAudio(audioData: Data) {
+    func accumulateAudio(audioData: Data) {
         audioBuffer.append(audioData)
-        
-        // For better responsiveness, send smaller chunks more frequently
-        if audioBuffer.count >= streamingBufferSize {
-            let durationSeconds = Double(audioBuffer.count) / (16000.0 * 2.0) // 16kHz, 16-bit (2 bytes)
-            print("🎵 Sending \(audioBuffer.count) bytes (~\(String(format: "%.2f", durationSeconds))s) to transcription API")
-            sendAudioToWhisper(audioData: audioBuffer)
-            audioBuffer.removeAll()
+        print("🎵 Accumulated \(audioBuffer.count) bytes of audio")
+    }
+    
+    func processAccumulatedAudio() {
+        guard !audioBuffer.isEmpty else {
+            print("⚠️ No audio data to process")
+            onTranscriptionComplete?("")
+            return
         }
+        
+        let durationSeconds = Double(audioBuffer.count) / (16000.0 * 2.0) // 16kHz, 16-bit (2 bytes)
+        print("🎵 Processing \(audioBuffer.count) bytes (~\(String(format: "%.2f", durationSeconds))s) of audio")
+        
+        // Clear any previous transcript
+        accumulatedTranscript = ""
+        
+        // Send all accumulated audio at once
+        let audioToProcess = audioBuffer
+        audioBuffer.removeAll()
+        
+        sendAudioToWhisper(audioData: audioToProcess)
     }
     
     private func sendAudioToWhisper(audioData: Data) {
@@ -140,12 +150,12 @@ class WhisperClient {
                let text = json["text"] as? String {
                 
                 DispatchQueue.main.async { [weak self] in
-                    self?.accumulatedTranscript += text + " "
-                    print("Transcription: \(text)")
+                    // Set the complete transcript (not accumulating chunks anymore)
+                    self?.accumulatedTranscript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    print("📝 Transcription complete: \(text)")
                     
-                    // Call streaming callback with partial results
-                    let currentTranscript = self?.accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    self?.onStreamingTranscript?(currentTranscript)
+                    // Call completion callback with final result
+                    self?.onTranscriptionComplete?(self?.accumulatedTranscript ?? "")
                 }
             }
         } catch {
@@ -154,6 +164,11 @@ class WhisperClient {
             // Print raw response for debugging
             if let responseString = String(data: data, encoding: .utf8) {
                 print("Raw response: \(responseString)")
+            }
+            
+            // Call completion callback with empty result on error
+            DispatchQueue.main.async { [weak self] in
+                self?.onTranscriptionComplete?("")
             }
         }
     }

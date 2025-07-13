@@ -96,12 +96,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Setup audio recording callback
         audioManager.onAudioDataReceived = { [weak self] audioData in
-            self?.processAudioData(audioData)
+            // Just accumulate audio while recording, don't process it yet
+            self?.whisperClient.accumulateAudio(audioData: audioData)
         }
         
-        // Setup streaming transcription callback for real-time feedback
-        whisperClient.onStreamingTranscript = { [weak self] partialTranscript in
-            self?.updateMenuBarWithPartialTranscript(partialTranscript)
+        // Setup transcription completion callback
+        whisperClient.onTranscriptionComplete = { [weak self] finalTranscript in
+            self?.handleTranscriptionComplete(finalTranscript)
         }
         
         // Listen for hotkey changes
@@ -142,44 +143,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func stopRecording() {
         print("Stopping recording...")
-        updateMenuBarIcon(isRecording: false, isTranscribing: true)
         audioManager.stopRecording()
         
-        // Get the current transcript immediately
-        let currentTranscript = whisperClient.getFinalTranscript()
-        if !currentTranscript.isEmpty {
-            // Add to history immediately
-            addTranscriptionToHistory(currentTranscript)
-        }
+        // Show transcribing state
+        updateMenuBarIcon(isRecording: false, isTranscribing: true)
         
-        // Add a small delay to ensure final audio chunks are processed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            // Finalize transcript and paste
-            let finalTranscript = self?.whisperClient.getFinalTranscript() ?? ""
-            if !finalTranscript.isEmpty {
-                print("📝 Transcription: \(finalTranscript)")
-                
-                // Update history again with final result (in case it changed)
-                self?.addTranscriptionToHistory(finalTranscript)
-                
-                self?.clipboardUtils.copyToClipboard(text: finalTranscript)
-                
-                if self?.settingsManager.autoPaste == true {
-                    self?.clipboardUtils.simulatePasteKeystroke()
-                }
-                
-                // Show notification with the transcribed text
-                if self?.settingsManager.showNotifications == true {
-                    self?.showTranscriptionNotification(text: finalTranscript)
-                }
-            } else {
-                print("⚠️ No transcription received")
-            }
-            
-            // Clear transcript for next recording and return to ready state
-            self?.whisperClient.clearTranscript()
-            self?.updateMenuBarIcon(isRecording: false, isTranscribing: false)
-        }
+        // Process all accumulated audio at once
+        whisperClient.processAccumulatedAudio()
     }
     
     private func addTranscriptionToHistory(_ text: String) {
@@ -216,18 +186,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSUserNotificationCenter.default.deliver(notification)
     }
     
-    private func processAudioData(_ audioData: Data) {
-        whisperClient.transcribeAudio(audioData: audioData)
-    }
-    
-    private func updateMenuBarWithPartialTranscript(_ partialTranscript: String) {
-        DispatchQueue.main.async { [weak self] in
-            // Show partial transcript in menu status while transcribing
-            let truncatedTranscript = partialTranscript.count > 50 ? String(partialTranscript.prefix(50)) + "..." : partialTranscript
-            self?.statusItem.button?.title = "🟠"
-            self?.statusItem.button?.toolTip = "Mac Whisper - Transcribing: \(truncatedTranscript)"
-            self?.statusMenuItem.title = "Status: 🟠 Transcribing... \"\(truncatedTranscript)\""
+    private func handleTranscriptionComplete(_ finalTranscript: String) {
+        let trimmedTranscript = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !trimmedTranscript.isEmpty {
+            print("📝 Transcription complete: \(trimmedTranscript)")
+            
+            // Add to history immediately
+            addTranscriptionToHistory(trimmedTranscript)
+            
+            // Copy to clipboard
+            clipboardUtils.copyToClipboard(text: trimmedTranscript)
+            
+            if settingsManager.autoPaste == true {
+                clipboardUtils.simulatePasteKeystroke()
+            }
+            
+            // Show notification with the transcribed text
+            if settingsManager.showNotifications == true {
+                showTranscriptionNotification(text: trimmedTranscript)
+            }
+        } else {
+            print("⚠️ No transcription received")
         }
+        
+        // Always return to ready state
+        updateMenuBarIcon(isRecording: false, isTranscribing: false)
     }
     
     @objc private func showAbout() {
