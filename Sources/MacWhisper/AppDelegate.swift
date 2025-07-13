@@ -40,9 +40,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        // Add manual test option for debugging
-        menu.addItem(NSMenuItem(title: "🧪 Test Paste Function", action: #selector(testPasteFunction), keyEquivalent: ""))
-        
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "📋 Check Permissions", action: #selector(checkPermissions), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Request Permissions", action: #selector(requestPermissions), keyEquivalent: ""))
@@ -117,30 +114,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func checkPermissionsOnStartup() {
-        print("🔍 Checking permissions...")
-        
         let hasAccessibility = permissionManager.checkAccessibilityPermission()
         let hasMicrophone = permissionManager.checkMicrophonePermission()
         
-        if hasAccessibility && hasMicrophone {
-            print("✅ All permissions granted - global hotkeys should work!")
-        } else {
-            if !hasAccessibility {
-                print("❌ Missing accessibility permission - global hotkeys won't work")
-                print("💡 Go to System Preferences → Security & Privacy → Privacy → Accessibility")
-                print("   and add MacWhisper to the list")
-            }
-            if !hasMicrophone {
-                print("❌ Missing microphone permission - audio recording won't work")
+        if !hasAccessibility || !hasMicrophone {
+            // Show a non-intrusive status update
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.statusMenuItem.title = "⚠️ Permissions needed - click to fix"
             }
         }
     }
     
     private func startRecording() {
-        print("🎤 Starting recording...")
-        
         // Store the currently focused app before recording starts
-        print("📱 Storing current focused app...")
         clipboardUtils.storeCurrentFocusedApp()
         
         updateMenuBarIcon(isRecording: true)
@@ -148,7 +134,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func stopRecording() {
-        print("Stopping recording...")
         audioManager.stopRecording()
         
         // Show transcribing state
@@ -210,8 +195,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleTranscriptionComplete(_ finalTranscript: String) {
         let trimmedTranscript = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        print("🎤 Final transcript: \(trimmedTranscript)")
-        
         // Update UI on main thread
         DispatchQueue.main.async {
             self.updateMenuBarIcon(isRecording: false, isTranscribing: false)
@@ -220,23 +203,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Add to history
         if !trimmedTranscript.isEmpty {
             settingsManager.addTranscription(trimmedTranscript)
-            
-            // Update menu to show latest transcription
             updateLastTranscriptionMenuItem()
             
             // Check if auto-paste is enabled
             if settingsManager.autoPaste {
                 // Check accessibility permission before attempting auto-paste
                 if permissionManager.checkAccessibilityPermission() {
-                    // Use the new automatic paste approach:
-                    // 1. Set clipboard text
-                    // 2. Wait 0.3 seconds  
-                    // 3. Try multiple paste methods for reliability
                     clipboardUtils.pasteTextAutomatically(text: trimmedTranscript)
-                    
-                    // Show notification that text was pasted
-                    self.showSimpleNotification(title: "✅ Transcription Auto-Pasted", 
-                                              body: "Attempted auto-paste: \(trimmedTranscript)")
+                    self.showSimpleNotification(title: "✅ Auto-Pasted", body: trimmedTranscript)
                 } else {
                     // No accessibility permission - just copy to clipboard
                     DispatchQueue.main.async {
@@ -244,9 +218,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         pasteboard.clearContents()
                         pasteboard.setString(trimmedTranscript, forType: .string)
                         
-                        // Show notification with permission reminder
-                        self.showSimpleNotification(title: "📋 Transcription Ready", 
-                                                  body: "Copied to clipboard. Grant Accessibility permission for auto-paste: \(trimmedTranscript)")
+                        self.showSimpleNotification(title: "📋 Copied to Clipboard", 
+                                                  body: "Grant Accessibility permission for auto-paste")
                     }
                 }
             } else {
@@ -256,9 +229,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     pasteboard.clearContents()
                     pasteboard.setString(trimmedTranscript, forType: .string)
                     
-                    // Show notification with instruction
-                    self.showSimpleNotification(title: "✅ Transcription Ready", 
-                                              body: "Copied to clipboard. Press Cmd+V to paste: \(trimmedTranscript)")
+                    self.showSimpleNotification(title: "✅ Copied to Clipboard", body: trimmedTranscript)
                 }
             }
         }
@@ -322,10 +293,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         showSimpleNotification(title: "📋 Copied!", body: "Transcription copied to clipboard")
     }
     
-    @objc private func testPasteFunction() {
-        print("🧪 Manual paste test triggered from menu")
-        clipboardUtils.pasteTextAutomatically(text: "Test paste - MacWhisper working!")
-    }
+
     
     private func updateLastTranscriptionMenuItem() {
         DispatchQueue.main.async {
