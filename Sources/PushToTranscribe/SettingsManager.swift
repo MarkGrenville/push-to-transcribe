@@ -41,8 +41,8 @@ class SettingsManager: ObservableObject {
     // Callback for hotkey changes
     var hotkeyChanged: (() -> Void)?
     
-    private let settingsKey = "MacWhisperSettings"
-    private let historyKey = "MacWhisperHistory"
+    private let settingsKey = "PushToTranscribeSettings"
+    private let historyKey = "PushToTranscribeHistory"
     private let maxHistoryCount = 100
     
     init() {

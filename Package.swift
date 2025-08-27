@@ -3,14 +3,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "MacWhisper",
+    name: "PushToTranscribe",
     platforms: [
         .macOS(.v11)
     ],
     products: [
         .executable(
-            name: "MacWhisper",
-            targets: ["MacWhisper"]
+            name: "PushToTranscribe",
+            targets: ["PushToTranscribe"]
         )
     ],
     dependencies: [
@@ -18,9 +18,9 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "MacWhisper",
+            name: "PushToTranscribe",
             dependencies: [],
-            path: "Sources/MacWhisper",
+            path: "Sources/PushToTranscribe",
             resources: [
                 .process("Resources")
             ]

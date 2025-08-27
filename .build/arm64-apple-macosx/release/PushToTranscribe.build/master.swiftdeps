@@ -1,0 +1,16 @@
+version: "Apple Swift version 6.1.2 (swiftlang-6.1.2.1.2 clang-1700.0.13.5)"
+options: "02f472117a47ad258b30c970e5b5672772324518ac6c58b6e520b69bd63f1679"
+build_start_time: [1756324260, 707712000]
+build_end_time: [1756324262, 714461000]
+inputs:
+  ? "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/DerivedSources/resource_bundle_accessor.swift"
+  : [1756324238, 618322232]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/AppDelegate.swift": [1756324221, 582188147]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/AudioRecordingManager.swift": [1756324256, 413962138]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/ClipboardUtils.swift": [1752428190, 615595212]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/HotkeyManager.swift": [1752421646, 389591848]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/PermissionManager.swift": [1756324211, 51601089]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/SettingsManager.swift": [1756324212, 440029288]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/SettingsView.swift": [1752421790, 125433131]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/WhisperClient.swift": [1752426213, 162937070]
+  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/main.swift": [1752419089, 321747403]

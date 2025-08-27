@@ -43,7 +43,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "📋 Check Permissions", action: #selector(checkPermissions), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Request Permissions", action: #selector(requestPermissions), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "About Mac Whisper", action: #selector(showAbout), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "About Push to Transcribe", action: #selector(showAbout), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         
@@ -246,7 +246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "Mac Whisper"
+        alert.messageText = "Push to Transcribe"
         alert.informativeText = "Real-time voice transcription using OpenAI Whisper API\n\nPress and hold Control + Space to record and transcribe speech."
         alert.alertStyle = .informational
         alert.runModal()

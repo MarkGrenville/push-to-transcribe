@@ -1,4 +1,4 @@
-# Mac Whisper - Real-time Voice Transcription
+# Push to Transcribe - Real-time Voice Transcription
 
 A macOS menu bar app that provides real-time voice transcription using OpenAI's Whisper API.
 

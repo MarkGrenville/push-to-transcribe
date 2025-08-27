@@ -1,0 +1,10 @@
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/AppDelegate.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/AudioRecordingManager.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/ClipboardUtils.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/HotkeyManager.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/PermissionManager.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/SettingsManager.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/SettingsView.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/WhisperClient.swift
+/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/main.swift
+/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/DerivedSources/resource_bundle_accessor.swift

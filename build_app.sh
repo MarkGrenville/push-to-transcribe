@@ -1,9 +1,9 @@
 #!/bin/bash
 
-echo "Building MacWhisper.app..."
+echo "Building Push to Transcribe.app..."
 
 # Clean previous builds
-rm -rf MacWhisper.app/Contents/MacOS/MacWhisper
+rm -rf PushToTranscribe.app/Contents/MacOS/PushToTranscribe
 
 # Build the Swift package
 echo "Compiling Swift code..."
@@ -16,24 +16,24 @@ fi
 
 # Copy the executable to the app bundle
 echo "Creating app bundle..."
-cp .build/release/MacWhisper MacWhisper.app/Contents/MacOS/
+cp .build/release/PushToTranscribe PushToTranscribe.app/Contents/MacOS/
 
 # Make the executable... executable
-chmod +x MacWhisper.app/Contents/MacOS/MacWhisper
+chmod +x PushToTranscribe.app/Contents/MacOS/PushToTranscribe
 
-echo "✅ MacWhisper.app created successfully!"
+echo "✅ Push to Transcribe.app created successfully!"
 echo ""
-echo "📦 Your app is ready at: MacWhisper.app"
+echo "📦 Your app is ready at: PushToTranscribe.app"
 echo ""
 echo "🚀 To install:"
-echo "   1. Copy MacWhisper.app to your Applications folder"
+echo "   1. Copy PushToTranscribe.app to your Applications folder"
 echo "   2. Open it from Applications or Launchpad"
 echo "   3. Grant permissions when prompted"
 echo ""
 echo "💡 To copy to Applications folder:"
-echo "   cp -r MacWhisper.app /Applications/"
+echo "   cp -r \"PushToTranscribe.app\" /Applications/"
 echo ""
 echo "🔧 To grant permissions manually:"
 echo "   System Preferences → Security & Privacy → Privacy"
-echo "   - Add MacWhisper to Microphone"
-echo "   - Add MacWhisper to Accessibility" 
+echo "   - Add Push to Transcribe to Microphone"
+echo "   - Add Push to Transcribe to Accessibility" 

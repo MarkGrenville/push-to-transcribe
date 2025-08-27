@@ -52,7 +52,7 @@ class AudioRecordingManager: NSObject {
         }
         
         // Calculate output frame count for resampling
-        let inputSampleRate = inputFormat.sampleRate
+        let inputSampleRate = buffer.format.sampleRate
         let outputSampleRate = outputFormat.sampleRate
         let ratio = outputSampleRate / inputSampleRate
         let outputFrameCount = UInt32(Double(buffer.frameLength) * ratio)

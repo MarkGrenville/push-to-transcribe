@@ -69,7 +69,7 @@ class PermissionManager {
     private func showMicrophonePermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Microphone Permission Required"
-        alert.informativeText = "Mac Whisper needs access to your microphone to record audio for transcription. Please grant permission in System Preferences > Security & Privacy > Microphone."
+        alert.informativeText = "Push to Transcribe needs access to your microphone to record audio for transcription. Please grant permission in System Preferences > Security & Privacy > Microphone."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Preferences")
         alert.addButton(withTitle: "Cancel")
@@ -85,7 +85,7 @@ class PermissionManager {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
         alert.informativeText = """
-        Mac Whisper needs accessibility permission to:
+        Push to Transcribe needs accessibility permission to:
         • Monitor global hotkeys (Control + Space)
         • Automatically paste transcribed text (Cmd + V simulation)
         • Use Apple Events for text input
@@ -94,10 +94,10 @@ class PermissionManager {
         1. Open System Preferences > Security & Privacy > Privacy
         2. Select "Accessibility" from the left sidebar
         3. Click the lock icon and enter your password
-        4. Find "MacWhisper" in the list and check the box ✅
-        5. If MacWhisper isn't in the list, click "+" and add it
+        4. Find "Push to Transcribe" in the list and check the box ✅
+        5. If Push to Transcribe isn't in the list, click "+" and add it
         
-        ⚠️ Important: Restart MacWhisper after granting permission!
+        ⚠️ Important: Restart Push to Transcribe after granting permission!
         """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Preferences")
@@ -156,7 +156,7 @@ class PermissionManager {
         Microphone: \(micPermission)
         Accessibility: \(accessibilityPermission)
         
-        Both permissions are required for Mac Whisper to function properly.
+        Both permissions are required for Push to Transcribe to function properly.
         
         💡 Auto-paste functionality specifically requires Accessibility permission.
         """
