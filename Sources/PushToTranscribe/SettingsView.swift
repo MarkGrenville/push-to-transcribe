@@ -44,12 +44,13 @@ struct GeneralSettingsView: View {
             GroupBox(label: Text("Transcription Model")) {
                 VStack(alignment: .leading, spacing: 10) {
                     Picker("Model:", selection: $settingsManager.transcriptionModel) {
-                        Text("Whisper-1 (Standard)").tag("whisper-1")
-                        Text("GPT-4o Transcribe (Premium)").tag("gpt-4o-transcribe")
+                        Text("GPT-4o Mini Transcribe (Fastest) ⚡").tag("gpt-4o-mini-transcribe")
+                        Text("GPT-4o Transcribe (Best Quality) 🎯").tag("gpt-4o-transcribe")
+                        Text("Whisper-1 (Legacy)").tag("whisper-1")
                     }
                     .pickerStyle(RadioGroupPickerStyle())
                     
-                    Text("GPT-4o Transcribe provides higher quality transcription than Whisper-1 but costs more")
+                    Text("GPT-4o Mini is the fastest option. GPT-4o offers best accuracy. Whisper-1 is the original model.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -75,8 +76,10 @@ struct GeneralSettingsView: View {
                 .padding(10)
             }
             
-            Toggle("Show notifications", isOn: $settingsManager.showNotifications)
+            Toggle("Copy to clipboard", isOn: $settingsManager.copyToClipboard)
             Toggle("Auto-paste transcriptions", isOn: $settingsManager.autoPaste)
+                .disabled(!settingsManager.copyToClipboard)
+            Toggle("Show notifications", isOn: $settingsManager.showNotifications)
             
             Spacer()
         }

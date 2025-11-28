@@ -116,8 +116,8 @@ class WhisperClient {
     private func createMultipartBody(audioData: Data, boundary: String) -> Data {
         var body = Data()
         
-        // Add model parameter
-        let model = settingsManager?.transcriptionModel ?? "whisper-1"
+        // Add model parameter - default to fastest model
+        let model = settingsManager?.transcriptionModel ?? "gpt-4o-mini-transcribe"
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
         body.append("\(model)\r\n".data(using: .utf8)!)

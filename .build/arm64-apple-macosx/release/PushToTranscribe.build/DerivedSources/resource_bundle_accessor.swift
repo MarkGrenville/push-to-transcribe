@@ -3,7 +3,7 @@ import Foundation
 extension Foundation.Bundle {
     static let module: Bundle = {
         let mainPath = Bundle.main.bundleURL.appendingPathComponent("PushToTranscribe_PushToTranscribe.bundle").path
-        let buildPath = "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe_PushToTranscribe.bundle"
+        let buildPath = "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe_PushToTranscribe.bundle"
 
         let preferredBundle = Bundle(path: mainPath)
 

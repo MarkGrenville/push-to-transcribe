@@ -4,7 +4,8 @@ import Combine
 
 class SettingsManager: ObservableObject {
     // Published properties for UI binding
-    @Published var transcriptionModel: String = "gpt-4o-transcribe" {
+    // Default to the fastest model for best push-to-talk experience
+    @Published var transcriptionModel: String = "gpt-4o-mini-transcribe" {
         didSet { saveSettings() }
     }
     
@@ -13,6 +14,10 @@ class SettingsManager: ObservableObject {
     }
     
     @Published var showNotifications: Bool = true {
+        didSet { saveSettings() }
+    }
+    
+    @Published var copyToClipboard: Bool = true {
         didSet { saveSettings() }
     }
     
@@ -57,6 +62,7 @@ class SettingsManager: ObservableObject {
             "transcriptionModel": transcriptionModel,
             "language": language,
             "showNotifications": showNotifications,
+            "copyToClipboard": copyToClipboard,
             "autoPaste": autoPaste,
             "hotkeyModifiers": hotkeyModifiers.rawValue,
             "hotkeyKeyCode": hotkeyKeyCode
@@ -80,6 +86,10 @@ class SettingsManager: ObservableObject {
         
         if let notifications = settings["showNotifications"] as? Bool {
             showNotifications = notifications
+        }
+        
+        if let clipboard = settings["copyToClipboard"] as? Bool {
+            copyToClipboard = clipboard
         }
         
         if let paste = settings["autoPaste"] as? Bool {

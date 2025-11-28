@@ -24,12 +24,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func setupStatusBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "🎤"
-        statusItem.button?.toolTip = "Mac Whisper - Voice Transcription (Hold Control+Space to record)"
+        
+        // Use SF Symbol for flat, single-color icon that adapts to light/dark mode
+        if let image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Microphone") {
+            image.isTemplate = true // Makes it adapt to menu bar appearance
+            statusItem.button?.image = image
+        }
+        statusItem.button?.toolTip = "Push to Transcribe - Voice Transcription (Hold Control+Space to record)"
         
         let menu = NSMenu()
         
-        statusMenuItem = NSMenuItem(title: "Status: 🎤 Ready", action: nil, keyEquivalent: "")
+        statusMenuItem = NSMenuItem(title: "Ready", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
         
@@ -41,7 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "📋 Check Permissions", action: #selector(checkPermissions), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Check Permissions", action: #selector(checkPermissions), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Request Permissions", action: #selector(requestPermissions), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "About Push to Transcribe", action: #selector(showAbout), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
@@ -56,19 +61,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func updateMenuBarIcon(isRecording: Bool, isTranscribing: Bool) {
         DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            let symbolName: String
+            let tooltip: String
+            let status: String
+            
             if isRecording {
-                self?.statusItem.button?.title = "🔴"
-                self?.statusItem.button?.toolTip = "Mac Whisper - Recording... (Release Control+Space to stop)"
-                self?.statusMenuItem.title = "Status: 🔴 Recording..."
+                symbolName = "mic.fill"  // Filled mic while recording
+                tooltip = "Push to Transcribe - Recording... (Release to stop)"
+                status = "Recording..."
             } else if isTranscribing {
-                self?.statusItem.button?.title = "🟠"
-                self?.statusItem.button?.toolTip = "Mac Whisper - Transcribing audio..."
-                self?.statusMenuItem.title = "Status: 🟠 Transcribing..."
+                symbolName = "waveform"  // Waveform while processing
+                tooltip = "Push to Transcribe - Transcribing audio..."
+                status = "Transcribing..."
             } else {
-                self?.statusItem.button?.title = "🎤"
-                self?.statusItem.button?.toolTip = "Mac Whisper - Voice Transcription (Hold Control+Space to record)"
-                self?.statusMenuItem.title = "Status: 🎤 Ready"
+                symbolName = "mic"  // Outline mic when ready
+                tooltip = "Push to Transcribe - Voice Transcription (Hold Control+Space to record)"
+                status = "Ready"
             }
+            
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: status) {
+                image.isTemplate = true
+                self.statusItem.button?.image = image
+            }
+            self.statusItem.button?.toolTip = tooltip
+            self.statusMenuItem.title = status
         }
     }
     
@@ -101,6 +119,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.whisperClient.accumulateAudio(audioData: audioData)
         }
         
+        // Setup callback for when recording fully stops (all buffers captured)
+        audioManager.onRecordingStopped = { [weak self] in
+            print("📼 Recording fully stopped - now processing all captured audio")
+            // Only process audio after all buffers have been captured
+            self?.whisperClient.processAccumulatedAudio()
+        }
+        
         // Setup transcription completion callback
         whisperClient.onTranscriptionComplete = { [weak self] finalTranscript in
             print("📋 GOT TRANSCRIPT: \(finalTranscript)")
@@ -120,7 +145,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !hasAccessibility || !hasMicrophone {
             // Show a non-intrusive status update
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.statusMenuItem.title = "⚠️ Permissions needed - click to fix"
+                self.statusMenuItem.title = "Permissions needed"
             }
         }
     }
@@ -134,13 +159,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func stopRecording() {
-        audioManager.stopRecording()
-        
-        // Show transcribing state
+        // Show transcribing state immediately for user feedback
         updateMenuBarIcon(isRecording: false, isTranscribing: true)
         
-        // Process all accumulated audio at once
-        whisperClient.processAccumulatedAudio()
+        // Stop recording - the audio manager will call onRecordingStopped callback
+        // when all audio buffers have been captured, which then triggers transcription
+        audioManager.stopRecording()
     }
     
     private func addTranscriptionToHistory(_ text: String) {
@@ -205,32 +229,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             settingsManager.addTranscription(trimmedTranscript)
             updateLastTranscriptionMenuItem()
             
-            // Check if auto-paste is enabled
-            if settingsManager.autoPaste {
-                // Check accessibility permission before attempting auto-paste
-                if permissionManager.checkAccessibilityPermission() {
-                    clipboardUtils.pasteTextAutomatically(text: trimmedTranscript)
-                    self.showSimpleNotification(title: "✅ Auto-Pasted", body: trimmedTranscript)
+            // Check if copy to clipboard is enabled
+            if settingsManager.copyToClipboard {
+                // Check if auto-paste is enabled
+                if settingsManager.autoPaste {
+                    // Check accessibility permission before attempting auto-paste
+                    if permissionManager.checkAccessibilityPermission() {
+                        clipboardUtils.pasteTextAutomatically(text: trimmedTranscript)
+                        self.showSimpleNotification(title: "✅ Auto-Pasted", body: trimmedTranscript)
+                    } else {
+                        // No accessibility permission - just copy to clipboard
+                        DispatchQueue.main.async {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString(trimmedTranscript, forType: .string)
+                            
+                            self.showSimpleNotification(title: "📋 Copied to Clipboard", 
+                                                      body: "Grant Accessibility permission for auto-paste")
+                        }
+                    }
                 } else {
-                    // No accessibility permission - just copy to clipboard
+                    // Just copy to clipboard without auto-pasting
                     DispatchQueue.main.async {
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
                         pasteboard.setString(trimmedTranscript, forType: .string)
                         
-                        self.showSimpleNotification(title: "📋 Copied to Clipboard", 
-                                                  body: "Grant Accessibility permission for auto-paste")
+                        self.showSimpleNotification(title: "✅ Copied to Clipboard", body: trimmedTranscript)
                     }
                 }
             } else {
-                // Just copy to clipboard without auto-pasting
-                DispatchQueue.main.async {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(trimmedTranscript, forType: .string)
-                    
-                    self.showSimpleNotification(title: "✅ Copied to Clipboard", body: trimmedTranscript)
-                }
+                // Not copying to clipboard - just show notification
+                self.showSimpleNotification(title: "✅ Transcribed", body: trimmedTranscript)
             }
         }
     }
@@ -298,12 +328,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateLastTranscriptionMenuItem() {
         DispatchQueue.main.async {
             if self.settingsManager.transcriptionHistory.isEmpty {
-                self.lastTranscriptionMenuItem.title = "📋 Last: (none)"
+                self.lastTranscriptionMenuItem.title = "Last: (none)"
                 self.lastTranscriptionMenuItem.isEnabled = false
             } else {
                 let recent = self.settingsManager.transcriptionHistory[0]
                 let preview = recent.text.count > 40 ? String(recent.text.prefix(40)) + "..." : recent.text
-                self.lastTranscriptionMenuItem.title = "📋 Last: \(preview)"
+                self.lastTranscriptionMenuItem.title = "Last: \(preview)"
                 self.lastTranscriptionMenuItem.isEnabled = true
             }
         }

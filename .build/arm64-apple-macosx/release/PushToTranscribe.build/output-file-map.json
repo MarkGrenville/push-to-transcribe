@@ -1,57 +1,67 @@
 {
   "": {
-    "dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/PushToTranscribe.d",
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/PushToTranscribe.o",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/master.swiftdeps"
+    "dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/PushToTranscribe.d",
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/PushToTranscribe.o",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/master.swiftdeps"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/AppDelegate.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/AppDelegate.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AppDelegate.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/AudioRecordingManager.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/AudioRecordingManager.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/AudioRecordingManager.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/ClipboardUtils.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/ClipboardUtils.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/ClipboardUtils.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/HotkeyManager.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/HotkeyManager.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/HotkeyManager.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/PermissionManager.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/PermissionManager.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/PermissionManager.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/SettingsManager.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/SettingsManager.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsManager.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/SettingsView.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/SettingsView.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/SettingsView.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/WhisperClient.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/WhisperClient.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/WhisperClient.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/Sources/PushToTranscribe/main.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/main.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/main~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/main.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/Sources/PushToTranscribe/main.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/main.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/main.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/main.dia"
   },
-  "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/DerivedSources/resource_bundle_accessor.swift": {
-    "object": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor.swift.o",
-    "swiftmodule": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor~partial.swiftmodule",
-    "swift-dependencies": "/Users/markgrenville/Projects/mac-whisper/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor.swiftdeps"
+  "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/DerivedSources/resource_bundle_accessor.swift": {
+    "object": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor.swiftdeps",
+    "diagnostics": "/Users/markgrenville/Projects/push-to-transcribe/.build/arm64-apple-macosx/release/PushToTranscribe.build/resource_bundle_accessor.dia"
   }
 }

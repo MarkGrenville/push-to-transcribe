@@ -1,12 +1,15 @@
 import AVFoundation
 import Foundation
+import AppKit
 
 class AudioRecordingManager: NSObject {
     private var audioEngine = AVAudioEngine()
     private var outputFormat: AVAudioFormat
     private var audioConverter: AVAudioConverter?
+    private var isRecording = false
     
     var onAudioDataReceived: ((Data) -> Void)?
+    var onRecordingStopped: (() -> Void)?
     
     override init() {
         // Create the desired output format (16kHz, mono, 16-bit PCM)
@@ -26,6 +29,18 @@ class AudioRecordingManager: NSObject {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         
+        // Validate that we have a valid input format (this can fail if microphone permission isn't fully active)
+        // A sample rate of 0 or channel count of 0 indicates the microphone isn't accessible
+        guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
+            print("❌ Invalid input format - microphone may not be available")
+            print("   Sample rate: \(inputFormat.sampleRate), channels: \(inputFormat.channelCount)")
+            print("💡 Please restart the app after granting microphone permission")
+            showMicrophoneRestartAlert()
+            return false
+        }
+        
+        print("✅ Audio input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channel(s)")
+        
         // Create audio converter for format conversion
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             print("❌ Failed to create audio converter")
@@ -34,15 +49,45 @@ class AudioRecordingManager: NSObject {
         
         audioConverter = converter
         
-        // Use larger buffer size for better quality (4096 samples = ~85ms at 48kHz)
-        let bufferSize: AVAudioFrameCount = 4096
+        // Use smaller buffer size for lower latency and more frequent callbacks
+        // This ensures we capture audio more frequently and don't lose data at the end
+        let bufferSize: AVAudioFrameCount = 2048
+        
+        // Remove any existing tap first to avoid conflicts
+        inputNode.removeTap(onBus: 0)
         
         // Install tap on input node with current input format
         inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] (buffer, time) in
-            self?.processAudioBuffer(buffer)
+            guard let self = self else { return }
+            
+            // Process all buffers while recording - don't filter here
+            // The isRecording check happens in stopRecording to ensure we 
+            // capture all in-flight buffers before stopping
+            self.processAudioBuffer(buffer)
         }
         
         return true
+    }
+    
+    private func showMicrophoneRestartAlert() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Restart Required"
+            alert.informativeText = "Microphone permission was recently granted. Please restart Push to Transcribe for it to take effect."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Quit & Restart")
+            alert.addButton(withTitle: "Later")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                // Relaunch the app
+                let url = Bundle.main.bundleURL
+                let configuration = NSWorkspace.OpenConfiguration()
+                NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
     
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
@@ -91,6 +136,8 @@ class AudioRecordingManager: NSObject {
     }
     
     func startRecording() {
+        isRecording = true
+        
         // Request microphone permission
         requestMicrophonePermission { [weak self] granted in
             if granted {
@@ -102,11 +149,33 @@ class AudioRecordingManager: NSObject {
     }
     
     func stopRecording() {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        guard isRecording else {
+            print("⚠️ stopRecording called but not recording")
+            return
+        }
         
-        // Reset the audio engine for next recording (handles microphone changes)
-        audioEngine = AVAudioEngine()
+        print("🛑 Stop recording requested - waiting for final audio buffers...")
+        isRecording = false
+        
+        // CRITICAL FIX: Add a delay to ensure any in-flight audio buffers are processed
+        // The audio engine processes buffers asynchronously, so when we stop immediately,
+        // the last ~100-200ms of audio can be lost. This delay ensures we capture
+        // the complete speech including the final words/sentence.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self = self else { return }
+            
+            // Now stop the audio engine after buffers have been flushed
+            self.audioEngine.stop()
+            self.audioEngine.inputNode.removeTap(onBus: 0)
+            
+            print("🛑 Audio engine stopped - all buffers captured")
+            
+            // Reset the audio engine for next recording (handles microphone changes)
+            self.audioEngine = AVAudioEngine()
+            
+            // Notify that recording has fully stopped and all audio is captured
+            self.onRecordingStopped?()
+        }
     }
     
     private func startAudioEngine() {
