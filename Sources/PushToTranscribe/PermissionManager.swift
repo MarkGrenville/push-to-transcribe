@@ -3,6 +3,7 @@ import AVFoundation
 import Cocoa
 
 class PermissionManager {
+    private let logger = DiagnosticLogger.shared
     
     func requestMicrophonePermission() {
         // On macOS, we need to use AVAudioApplication
@@ -129,17 +130,27 @@ class PermissionManager {
     }
     
     func checkMicrophonePermission() -> Bool {
+        var granted = true
         if #available(macOS 14.0, *) {
-            return AVAudioApplication.shared.recordPermission == .granted
-        } else {
-            // For older macOS versions, assume permission is granted
-            // The system will prompt automatically when we try to use the microphone
-            return true
+            granted = AVAudioApplication.shared.recordPermission == .granted
         }
+        // For older macOS versions, assume permission is granted
+        // The system will prompt automatically when we try to use the microphone
+        
+        logger.info("Microphone permission check: \(granted ? "✅ Granted" : "❌ Denied")", category: "Permissions")
+        return granted
     }
     
     func checkAccessibilityPermission() -> Bool {
-        return AXIsProcessTrusted()
+        let trusted = AXIsProcessTrusted()
+        logger.info("Accessibility permission check: \(trusted ? "✅ Granted" : "❌ Denied")", category: "Permissions")
+        
+        if !trusted {
+            logger.warning("Accessibility permission not granted - hotkeys and auto-paste will not work", category: "Permissions")
+            logger.info("Tip: If you recently rebuilt the app, you may need to remove and re-add it in System Settings → Privacy & Security → Accessibility", category: "Permissions")
+        }
+        
+        return trusted
     }
     
     func checkAllPermissions() -> Bool {

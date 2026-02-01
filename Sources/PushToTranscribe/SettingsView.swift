@@ -27,8 +27,15 @@ struct SettingsView: View {
                     Text("History")
                 }
                 .tag(2)
+            
+            DiagnosticsView()
+                .tabItem {
+                    Image(systemName: "stethoscope")
+                    Text("Diagnostics")
+                }
+                .tag(3)
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 600, height: 450)
     }
 }
 
@@ -278,5 +285,183 @@ struct TranscriptionEntry: Identifiable, Codable {
         self.id = UUID()
         self.text = text
         self.timestamp = Date()
+    }
+}
+
+struct DiagnosticsView: View {
+    @ObservedObject var logger = DiagnosticLogger.shared
+    @State private var filterText = ""
+    @State private var selectedLevel: LogEntry.LogLevel? = nil
+    
+    var filteredLogs: [LogEntry] {
+        var logs = logger.logs
+        
+        if let level = selectedLevel {
+            logs = logs.filter { $0.level == level }
+        }
+        
+        if !filterText.isEmpty {
+            logs = logs.filter { 
+                $0.message.localizedCaseInsensitiveContains(filterText) ||
+                $0.category.localizedCaseInsensitiveContains(filterText)
+            }
+        }
+        
+        return logs
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Diagnostics")
+                    .font(.title2)
+                    .bold()
+                
+                Spacer()
+                
+                // Log count indicator
+                Text("\(logger.logs.count) entries")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Filter controls
+            HStack(spacing: 10) {
+                TextField("Filter logs...", text: $filterText)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(maxWidth: 200)
+                
+                Picker("Level", selection: $selectedLevel) {
+                    Text("All").tag(nil as LogEntry.LogLevel?)
+                    Text("ℹ️ Info").tag(LogEntry.LogLevel.info as LogEntry.LogLevel?)
+                    Text("✅ Success").tag(LogEntry.LogLevel.success as LogEntry.LogLevel?)
+                    Text("⚠️ Warning").tag(LogEntry.LogLevel.warning as LogEntry.LogLevel?)
+                    Text("❌ Error").tag(LogEntry.LogLevel.error as LogEntry.LogLevel?)
+                    Text("🔍 Debug").tag(LogEntry.LogLevel.debug as LogEntry.LogLevel?)
+                }
+                .pickerStyle(MenuPickerStyle())
+                .frame(width: 120)
+                
+                Spacer()
+                
+                Toggle("Logging", isOn: $logger.isEnabled)
+                    .toggleStyle(SwitchToggleStyle())
+                
+                Button("Clear") {
+                    logger.clear()
+                }
+                .foregroundColor(.red)
+                
+                Button("Export") {
+                    exportLogs()
+                }
+            }
+            
+            // Log list
+            if filteredLogs.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No logs yet")
+                        .foregroundColor(.secondary)
+                    Text("Try recording something to see API activity")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(filteredLogs) { entry in
+                            LogEntryRow(entry: entry)
+                        }
+                    }
+                    .padding(.horizontal, 5)
+                }
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(5)
+            }
+            
+            // Quick info
+            HStack {
+                Text("💡 Tip: Look for ❌ errors or ⚠️ warnings if transcription is failing")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+        }
+        .padding(20)
+    }
+    
+    private func exportLogs() {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.text]
+        savePanel.nameFieldStringValue = "diagnostic-logs.txt"
+        
+        if savePanel.runModal() == .OK, let url = savePanel.url {
+            do {
+                try logger.exportLogs().write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                print("Failed to export logs: \(error)")
+            }
+        }
+    }
+}
+
+struct LogEntryRow: View {
+    let entry: LogEntry
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 5) {
+            Text(entry.formattedTime)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+                .frame(width: 85, alignment: .leading)
+            
+            Text(entry.level.rawValue)
+                .frame(width: 20)
+            
+            Text("[\(entry.category)]")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(categoryColor(entry.category))
+                .frame(width: 90, alignment: .leading)
+            
+            Text(entry.message)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(levelColor(entry.level))
+                .lineLimit(3)
+            
+            Spacer()
+        }
+        .padding(.vertical, 2)
+        .background(backgroundColor(entry.level).opacity(0.1))
+        .cornerRadius(2)
+    }
+    
+    private func levelColor(_ level: LogEntry.LogLevel) -> Color {
+        switch level {
+        case .info: return .primary
+        case .success: return .green
+        case .warning: return .orange
+        case .error: return .red
+        case .debug: return .gray
+        }
+    }
+    
+    private func backgroundColor(_ level: LogEntry.LogLevel) -> Color {
+        switch level {
+        case .error: return .red
+        case .warning: return .orange
+        default: return .clear
+        }
+    }
+    
+    private func categoryColor(_ category: String) -> Color {
+        switch category {
+        case "API": return .blue
+        case "Audio": return .purple
+        case "Transcription": return .green
+        default: return .secondary
+        }
     }
 } 

@@ -1,0 +1,8 @@
+{
+  "id": "push-to-transcribe",
+  "name": "Push to Transcribe",
+  "description": "A macOS menu bar app that provides real-time voice transcription using OpenAI's Whisper API. Press and hold a hotkey to record, release to transcribe and auto-paste.",
+  "focusIdentifier": "push-to-transcribe",
+  "projectPath": "/Users/markgrenville/Projects/push-to-transcribe",
+  "services": []
+}

@@ -15,11 +15,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let logger = DiagnosticLogger.shared
+        logger.info("Push to Transcribe starting up...", category: "App")
+        
         setupStatusBarItem()
         setupManagers()
         
         // Hide the app from the dock
         NSApp.setActivationPolicy(.accessory)
+        
+        logger.success("App initialized successfully", category: "App")
     }
     
     private func setupStatusBarItem() {
@@ -121,14 +126,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Setup callback for when recording fully stops (all buffers captured)
         audioManager.onRecordingStopped = { [weak self] in
-            print("📼 Recording fully stopped - now processing all captured audio")
+            let logger = DiagnosticLogger.shared
+            logger.info("Audio capture complete - sending to API", category: "Recording")
             // Only process audio after all buffers have been captured
             self?.whisperClient.processAccumulatedAudio()
         }
         
         // Setup transcription completion callback
         whisperClient.onTranscriptionComplete = { [weak self] finalTranscript in
-            print("📋 GOT TRANSCRIPT: \(finalTranscript)")
+            let logger = DiagnosticLogger.shared
+            logger.debug("onTranscriptionComplete callback fired", category: "Recording")
             self?.handleTranscriptionComplete(finalTranscript)
         }
         
@@ -151,6 +158,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func startRecording() {
+        let logger = DiagnosticLogger.shared
+        logger.info("Recording started - hotkey pressed", category: "Recording")
+        
         // Store the currently focused app before recording starts
         clipboardUtils.storeCurrentFocusedApp()
         
@@ -159,6 +169,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func stopRecording() {
+        let logger = DiagnosticLogger.shared
+        logger.info("Recording stopped - hotkey released", category: "Recording")
+        
         // Show transcribing state immediately for user feedback
         updateMenuBarIcon(isRecording: false, isTranscribing: true)
         
@@ -217,7 +230,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func handleTranscriptionComplete(_ finalTranscript: String) {
+        let logger = DiagnosticLogger.shared
         let trimmedTranscript = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if trimmedTranscript.isEmpty {
+            logger.warning("Transcription completed but result is empty", category: "Recording")
+        } else {
+            logger.success("Transcription completed: \(trimmedTranscript.count) characters", category: "Recording")
+        }
         
         // Update UI on main thread
         DispatchQueue.main.async {

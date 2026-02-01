@@ -7,6 +7,8 @@ class WhisperClient {
     private var accumulatedTranscript = ""
     private var audioBuffer = Data()
     private weak var settingsManager: SettingsManager?
+    private let logger = DiagnosticLogger.shared
+    private var requestStartTime: Date?
     
     // Callback for when transcription is complete
     var onTranscriptionComplete: ((String) -> Void)?
@@ -14,22 +16,26 @@ class WhisperClient {
     init(apiKey: String, settingsManager: SettingsManager) {
         self.apiKey = apiKey
         self.settingsManager = settingsManager
+        
+        // Log API key status (masked for security)
+        let maskedKey = apiKey.prefix(10) + "..." + apiKey.suffix(4)
+        logger.info("WhisperClient initialized with API key: \(maskedKey)", category: "API")
     }
     
     func accumulateAudio(audioData: Data) {
         audioBuffer.append(audioData)
-        print("🎵 Accumulated \(audioBuffer.count) bytes of audio")
+        logger.debug("Accumulated \(audioBuffer.count) bytes of audio", category: "Audio")
     }
     
     func processAccumulatedAudio() {
         guard !audioBuffer.isEmpty else {
-            print("⚠️ No audio data to process")
+            logger.warning("No audio data to process - buffer is empty", category: "Audio")
             onTranscriptionComplete?("")
             return
         }
         
         let durationSeconds = Double(audioBuffer.count) / (16000.0 * 2.0) // 16kHz, 16-bit (2 bytes)
-        print("🎵 Processing \(audioBuffer.count) bytes (~\(String(format: "%.2f", durationSeconds))s) of audio")
+        logger.info("Processing \(audioBuffer.count) bytes (~\(String(format: "%.2f", durationSeconds))s) of audio", category: "Audio")
         
         // Clear any previous transcript
         accumulatedTranscript = ""
@@ -44,40 +50,126 @@ class WhisperClient {
     private func sendAudioToWhisper(audioData: Data) {
         // Create a temporary WAV file
         guard let wavData = createWAVFile(from: audioData) else {
-            print("Failed to create WAV file")
+            logger.error("Failed to create WAV file from audio data", category: "API")
+            onTranscriptionComplete?("")
             return
         }
         
+        logger.info("Created WAV file: \(wavData.count) bytes", category: "API")
+        
         // Create multipart form data
         let boundary = UUID().uuidString
-        var request = URLRequest(url: URL(string: apiURL)!)
+        
+        guard let url = URL(string: apiURL) else {
+            logger.error("Invalid API URL: \(apiURL)", category: "API")
+            onTranscriptionComplete?("")
+            return
+        }
+        
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 60 // 60 second timeout
+        
+        let model = settingsManager?.transcriptionModel ?? "gpt-4o-mini-transcribe"
+        let language = settingsManager?.language ?? "en"
+        
+        logger.info("Sending API request to OpenAI", category: "API")
+        logger.info("Model: \(model), Language: \(language)", category: "API")
         
         let body = createMultipartBody(audioData: wavData, boundary: boundary)
         request.httpBody = body
         
+        logger.info("Request body size: \(body.count) bytes", category: "API")
+        
+        // Record start time
+        requestStartTime = Date()
+        
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            if let error = error {
-                print("Error: \(error)")
+            guard let self = self else {
+                self?.logger.error("WhisperClient deallocated during request", category: "API")
                 return
+            }
+            
+            // Calculate request duration
+            let duration: String
+            if let startTime = self.requestStartTime {
+                let elapsed = Date().timeIntervalSince(startTime)
+                duration = String(format: "%.2f", elapsed)
+            } else {
+                duration = "unknown"
+            }
+            
+            if let error = error {
+                self.logger.error("Network error after \(duration)s: \(error.localizedDescription)", category: "API")
+                
+                // Check for specific error types
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain {
+                    switch nsError.code {
+                    case NSURLErrorTimedOut:
+                        self.logger.error("Request timed out - server may be slow or unreachable", category: "API")
+                    case NSURLErrorNotConnectedToInternet:
+                        self.logger.error("No internet connection", category: "API")
+                    case NSURLErrorNetworkConnectionLost:
+                        self.logger.error("Network connection was lost", category: "API")
+                    case NSURLErrorSecureConnectionFailed:
+                        self.logger.error("SSL/TLS connection failed", category: "API")
+                    default:
+                        self.logger.error("NSURLError code: \(nsError.code)", category: "API")
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    self.onTranscriptionComplete?("")
+                }
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                self.logger.error("Invalid response type (not HTTP) after \(duration)s", category: "API")
+                DispatchQueue.main.async {
+                    self.onTranscriptionComplete?("")
+                }
+                return
+            }
+            
+            self.logger.info("Response received in \(duration)s - Status: \(httpResponse.statusCode)", category: "API")
+            
+            // Log response headers for debugging
+            if httpResponse.statusCode != 200 {
+                self.logger.warning("Response headers: \(httpResponse.allHeaderFields)", category: "API")
             }
             
             guard let data = data else {
-                print("No data received")
+                self.logger.error("No data in response body", category: "API")
+                DispatchQueue.main.async {
+                    self.onTranscriptionComplete?("")
+                }
                 return
             }
             
-            if let httpResponse = response as? HTTPURLResponse {
-                print("Response status: \(httpResponse.statusCode)")
+            self.logger.info("Response body size: \(data.count) bytes", category: "API")
+            
+            // Log raw response for non-200 status codes
+            if httpResponse.statusCode != 200 {
+                if let responseString = String(data: data, encoding: .utf8) {
+                    self.logger.error("Error response body: \(responseString)", category: "API")
+                }
+                DispatchQueue.main.async {
+                    self.onTranscriptionComplete?("")
+                }
+                return
             }
             
             // Handle the response on a background thread to avoid main thread blocking
             DispatchQueue.global(qos: .userInitiated).async {
-                self?.handleTranscriptionResponse(data: data)
+                self.handleTranscriptionResponse(data: data)
             }
         }.resume()
+        
+        logger.info("Request sent, waiting for response...", category: "API")
     }
     
     private func createWAVFile(from audioData: Data) -> Data? {
@@ -148,20 +240,53 @@ class WhisperClient {
     }
     
     private func handleTranscriptionResponse(data: Data) {
+        logger.debug("Parsing response JSON...", category: "API")
+        
+        // First, try to log the raw response for debugging
+        if let rawString = String(data: data, encoding: .utf8) {
+            let preview = rawString.count > 200 ? String(rawString.prefix(200)) + "..." : rawString
+            logger.debug("Raw response: \(preview)", category: "API")
+        }
+        
         do {
-            if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-               let text = json["text"] as? String {
+            if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                // Check for error response
+                if let error = json["error"] as? [String: Any] {
+                    let message = error["message"] as? String ?? "Unknown error"
+                    let type = error["type"] as? String ?? "unknown"
+                    let code = error["code"] as? String ?? "none"
+                    logger.error("API Error - Type: \(type), Code: \(code), Message: \(message)", category: "API")
+                    
+                    DispatchQueue.main.async {
+                        self.onTranscriptionComplete?("")
+                    }
+                    return
+                }
                 
-                let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("Transcription received: \(cleanText)")
-                
-                // Update using the existing callback mechanism on main thread
+                // Extract transcription text
+                if let text = json["text"] as? String {
+                    let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    logger.success("Transcription received: \(cleanText.count) characters", category: "API")
+                    logger.info("Text: \(cleanText)", category: "Transcription")
+                    
+                    // Update using the existing callback mechanism on main thread
+                    DispatchQueue.main.async {
+                        self.onTranscriptionComplete?(cleanText)
+                    }
+                } else {
+                    logger.error("Response JSON missing 'text' field. Keys: \(json.keys.joined(separator: ", "))", category: "API")
+                    DispatchQueue.main.async {
+                        self.onTranscriptionComplete?("")
+                    }
+                }
+            } else {
+                logger.error("Failed to parse response as JSON dictionary", category: "API")
                 DispatchQueue.main.async {
-                    self.onTranscriptionComplete?(cleanText)
+                    self.onTranscriptionComplete?("")
                 }
             }
         } catch {
-            print("Error parsing transcription response: \(error)")
+            logger.error("JSON parsing error: \(error.localizedDescription)", category: "API")
             // Handle error on main thread
             DispatchQueue.main.async {
                 self.onTranscriptionComplete?("")
