@@ -1,25 +1,39 @@
 import Cocoa
 import Carbon
 
+enum HotkeyType {
+    case normal
+    case cleanup
+}
+
 class HotkeyManager {
-    private var hotKeyRef: EventHotKeyRef?
+    private var primaryHotKeyRef: EventHotKeyRef?
+    private var cleanupHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
     private var isRecording = false
+    private var currentHotkeyType: HotkeyType = .normal
     private weak var settingsManager: SettingsManager?
+    private let logger = DiagnosticLogger.shared
     
-    var onHotkeyPressed: (() -> Void)?
-    var onHotkeyReleased: (() -> Void)?
+    // Callbacks now include the hotkey type
+    var onHotkeyPressed: ((HotkeyType) -> Void)?
+    var onHotkeyReleased: ((HotkeyType) -> Void)?
+    
+    // Hotkey IDs
+    private let primaryHotkeyId: UInt32 = 1
+    private let cleanupHotkeyId: UInt32 = 3  // Using 3 to avoid conflict with old id 2
+    private let hotkeySignature: OSType = 0x4D574852
     
     init(settingsManager: SettingsManager) {
         self.settingsManager = settingsManager
-        setupCarbonHotkey()
+        setupCarbonHotkeys()
     }
     
     deinit {
         cleanup()
     }
     
-    private func setupCarbonHotkey() {
+    private func setupCarbonHotkeys() {
         // Create event handler for hotkey events
         var eventType = EventTypeSpec()
         eventType.eventClass = OSType(kEventClassKeyboard)
@@ -39,22 +53,21 @@ class HotkeyManager {
                                          nil,
                                          &hotkeyId)
             
-            if result == noErr && hotkeyId.signature == OSType(0x4D574852) {
-                if hotkeyId.id == 1 {
-                    // Start recording
-                    if !hotkeyManager.isRecording {
-                        hotkeyManager.isRecording = true
-                        DispatchQueue.main.async {
-                            hotkeyManager.onHotkeyPressed?()
-                        }
+            if result == noErr && hotkeyId.signature == hotkeyManager.hotkeySignature {
+                if !hotkeyManager.isRecording {
+                    hotkeyManager.isRecording = true
+                    
+                    // Determine which hotkey was pressed
+                    if hotkeyId.id == hotkeyManager.primaryHotkeyId {
+                        hotkeyManager.currentHotkeyType = .normal
+                        hotkeyManager.logger.info("Primary hotkey pressed (normal mode)", category: "Hotkey")
+                    } else if hotkeyId.id == hotkeyManager.cleanupHotkeyId {
+                        hotkeyManager.currentHotkeyType = .cleanup
+                        hotkeyManager.logger.info("Cleanup hotkey pressed (cleanup mode)", category: "Hotkey")
                     }
-                } else if hotkeyId.id == 2 {
-                    // Stop recording
-                    if hotkeyManager.isRecording {
-                        hotkeyManager.isRecording = false
-                        DispatchQueue.main.async {
-                            hotkeyManager.onHotkeyReleased?()
-                        }
+                    
+                    DispatchQueue.main.async {
+                        hotkeyManager.onHotkeyPressed?(hotkeyManager.currentHotkeyType)
                     }
                 }
             }
@@ -72,33 +85,67 @@ class HotkeyManager {
                                        &eventHandler)
         
         if status != noErr {
-            print("Failed to install event handler: \(status)")
+            logger.error("Failed to install event handler: \(status)", category: "Hotkey")
             return
         }
         
-        // Register hotkey based on settings
-        let hotkeyDownId = EventHotKeyID(signature: OSType(0x4D574852), id: 1)
+        // Register primary hotkey
+        registerPrimaryHotkey()
+        
+        // Register cleanup hotkey if enabled
+        registerCleanupHotkey()
+        
+        // Setup key release monitoring with NSEvent since Carbon doesn't handle key release well
+        setupKeyReleaseMonitoring()
+    }
+    
+    private func registerPrimaryHotkey() {
+        let hotkeyDownId = EventHotKeyID(signature: hotkeySignature, id: primaryHotkeyId)
         let keyCode = settingsManager?.hotkeyKeyCode ?? 49
         let modifiers = settingsManager?.hotkeyModifiers ?? .control
         
         let carbonModifiers = convertToCarbonModifiers(modifiers)
-        let downResult = RegisterEventHotKey(UInt32(keyCode),
-                                           carbonModifiers,
-                                           hotkeyDownId,
-                                           GetApplicationEventTarget(),
-                                           0,
-                                           &hotKeyRef)
+        let result = RegisterEventHotKey(UInt32(keyCode),
+                                        carbonModifiers,
+                                        hotkeyDownId,
+                                        GetApplicationEventTarget(),
+                                        0,
+                                        &primaryHotKeyRef)
         
-        if downResult != noErr {
-            print("❌ Failed to register hotkey: \(downResult)")
+        if result != noErr {
+            logger.error("Failed to register primary hotkey: \(result)", category: "Hotkey")
         } else {
             let hotkeyDesc = settingsManager?.getHotkeyDescription() ?? "Control + Space"
-            print("✅ Global hotkey registered successfully!")
-            print("📝 Press and hold \(hotkeyDesc) to record")
+            logger.success("Primary hotkey registered: \(hotkeyDesc)", category: "Hotkey")
+            print("✅ Primary hotkey registered: \(hotkeyDesc)")
+        }
+    }
+    
+    private func registerCleanupHotkey() {
+        guard settingsManager?.cleanupHotkeyEnabled == true else {
+            logger.info("Cleanup hotkey is disabled", category: "Hotkey")
+            return
         }
         
-        // Setup key release monitoring with NSEvent since Carbon doesn't handle key release well
-        setupKeyReleaseMonitoring()
+        let hotkeyDownId = EventHotKeyID(signature: hotkeySignature, id: cleanupHotkeyId)
+        let keyCode = settingsManager?.cleanupHotkeyKeyCode ?? 49
+        let modifiers = settingsManager?.cleanupHotkeyModifiers ?? .option
+        
+        let carbonModifiers = convertToCarbonModifiers(modifiers)
+        let result = RegisterEventHotKey(UInt32(keyCode),
+                                        carbonModifiers,
+                                        hotkeyDownId,
+                                        GetApplicationEventTarget(),
+                                        0,
+                                        &cleanupHotKeyRef)
+        
+        if result != noErr {
+            logger.error("Failed to register cleanup hotkey: \(result)", category: "Hotkey")
+        } else {
+            let hotkeyDesc = settingsManager?.getCleanupHotkeyDescription() ?? "Option + Space"
+            logger.success("Cleanup hotkey registered: \(hotkeyDesc)", category: "Hotkey")
+            print("✅ Cleanup hotkey registered: \(hotkeyDesc)")
+        }
     }
     
     private func setupKeyReleaseMonitoring() {
@@ -117,8 +164,19 @@ class HotkeyManager {
     private func handleKeyRelease(_ event: NSEvent) {
         guard isRecording else { return }
         
-        let currentKeyCode = settingsManager?.hotkeyKeyCode ?? 49
-        let currentModifiers = settingsManager?.hotkeyModifiers ?? .control
+        // Get the key code and modifiers for the current hotkey type
+        let currentKeyCode: UInt16
+        let currentModifiers: NSEvent.ModifierFlags
+        
+        switch currentHotkeyType {
+        case .normal:
+            currentKeyCode = settingsManager?.hotkeyKeyCode ?? 49
+            currentModifiers = settingsManager?.hotkeyModifiers ?? .control
+        case .cleanup:
+            currentKeyCode = settingsManager?.cleanupHotkeyKeyCode ?? 49
+            currentModifiers = settingsManager?.cleanupHotkeyModifiers ?? .option
+        }
+        
         let isCurrentKeyPressed = event.keyCode == currentKeyCode
         let isCurrentModifierPressed = event.modifierFlags.contains(currentModifiers)
         
@@ -126,16 +184,23 @@ class HotkeyManager {
         if (event.type == .keyUp && isCurrentKeyPressed) || 
            (event.type == .flagsChanged && !isCurrentModifierPressed) {
             isRecording = false
+            let releasedType = currentHotkeyType
+            logger.info("Hotkey released (\(releasedType == .cleanup ? "cleanup" : "normal") mode)", category: "Hotkey")
             DispatchQueue.main.async { [weak self] in
-                self?.onHotkeyReleased?()
+                self?.onHotkeyReleased?(releasedType)
             }
         }
     }
     
     private func cleanup() {
-        if let hotKeyRef = hotKeyRef {
+        if let hotKeyRef = primaryHotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
+            self.primaryHotKeyRef = nil
+        }
+        
+        if let hotKeyRef = cleanupHotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            self.cleanupHotKeyRef = nil
         }
         
         if let eventHandler = eventHandler {
@@ -145,9 +210,10 @@ class HotkeyManager {
     }
     
     func updateHotkey() {
+        logger.info("Updating hotkey configuration...", category: "Hotkey")
         print("🔄 Updating hotkey configuration...")
         cleanup()
-        setupCarbonHotkey()
+        setupCarbonHotkeys()
     }
     
     private func convertToCarbonModifiers(_ modifiers: NSEvent.ModifierFlags) -> UInt32 {
@@ -168,4 +234,4 @@ class HotkeyManager {
         
         return carbonModifiers
     }
-} 
+}

@@ -6,6 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var audioManager: AudioRecordingManager!
     private var hotkeyManager: HotkeyManager!
     private var whisperClient: WhisperClient!
+    private var llmClient: LLMClient!
     private var clipboardUtils: ClipboardUtils!
     private var permissionManager: PermissionManager!
     private var statusMenuItem: NSMenuItem!
@@ -13,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTranscription: String = ""
     private var settingsManager: SettingsManager!
     private var settingsWindow: NSWindow?
+    private var currentRecordingMode: HotkeyType = .normal
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         let logger = DiagnosticLogger.shared
@@ -60,38 +62,60 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
     
+    private enum AppStatus {
+        case ready
+        case recording
+        case transcribing
+        case cleaningUp
+    }
+    
     private func updateMenuBarIcon(isRecording: Bool) {
-        updateMenuBarIcon(isRecording: isRecording, isTranscribing: false)
+        updateStatus(isRecording ? .recording : .ready)
     }
     
     private func updateMenuBarIcon(isRecording: Bool, isTranscribing: Bool) {
+        if isRecording {
+            updateStatus(.recording)
+        } else if isTranscribing {
+            updateStatus(.transcribing)
+        } else {
+            updateStatus(.ready)
+        }
+    }
+    
+    private func updateStatus(_ status: AppStatus) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
             let symbolName: String
             let tooltip: String
-            let status: String
+            let statusText: String
             
-            if isRecording {
+            switch status {
+            case .recording:
                 symbolName = "mic.fill"  // Filled mic while recording
                 tooltip = "Push to Transcribe - Recording... (Release to stop)"
-                status = "Recording..."
-            } else if isTranscribing {
-                symbolName = "waveform"  // Waveform while processing
+                statusText = "Recording..."
+            case .transcribing:
+                symbolName = "waveform"  // Waveform while transcribing
                 tooltip = "Push to Transcribe - Transcribing audio..."
-                status = "Transcribing..."
-            } else {
+                statusText = "Transcribing..."
+            case .cleaningUp:
+                symbolName = "sparkles"  // Sparkles while AI is cleaning up
+                tooltip = "Push to Transcribe - Cleaning up with AI..."
+                statusText = "Cleaning up..."
+            case .ready:
                 symbolName = "mic"  // Outline mic when ready
                 tooltip = "Push to Transcribe - Voice Transcription (Hold Control+Space to record)"
-                status = "Ready"
+                statusText = "Ready"
             }
             
-            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: status) {
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: statusText) {
                 image.isTemplate = true
                 self.statusItem.button?.image = image
             }
             self.statusItem.button?.toolTip = tooltip
-            self.statusMenuItem.title = status
+            self.statusMenuItem.title = statusText
         }
     }
     
@@ -101,7 +125,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         permissionManager = PermissionManager()
         audioManager = AudioRecordingManager()
-        whisperClient = WhisperClient(apiKey: "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", settingsManager: settingsManager)
+        let apiKey = "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"
+        whisperClient = WhisperClient(apiKey: apiKey, settingsManager: settingsManager)
+        llmClient = LLMClient(apiKey: apiKey)
         clipboardUtils = ClipboardUtils()
         
         // Check permissions before setting up hotkeys
@@ -109,13 +135,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         hotkeyManager = HotkeyManager(settingsManager: settingsManager)
         
-        // Setup hotkey callback
-        hotkeyManager.onHotkeyPressed = { [weak self] in
-            self?.startRecording()
+        // Setup hotkey callbacks - now with HotkeyType parameter
+        hotkeyManager.onHotkeyPressed = { [weak self] hotkeyType in
+            self?.startRecording(mode: hotkeyType)
         }
         
-        hotkeyManager.onHotkeyReleased = { [weak self] in
-            self?.stopRecording()
+        hotkeyManager.onHotkeyReleased = { [weak self] hotkeyType in
+            self?.stopRecording(mode: hotkeyType)
         }
         
         // Setup audio recording callback
@@ -157,9 +183,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    private func startRecording() {
+    private func startRecording(mode: HotkeyType) {
         let logger = DiagnosticLogger.shared
-        logger.info("Recording started - hotkey pressed", category: "Recording")
+        currentRecordingMode = mode
+        let modeStr = mode == .cleanup ? "cleanup" : "normal"
+        logger.info("Recording started - \(modeStr) mode", category: "Recording")
         
         // Store the currently focused app before recording starts
         clipboardUtils.storeCurrentFocusedApp()
@@ -168,9 +196,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         audioManager.startRecording()
     }
     
-    private func stopRecording() {
+    private func stopRecording(mode: HotkeyType) {
         let logger = DiagnosticLogger.shared
-        logger.info("Recording stopped - hotkey released", category: "Recording")
+        let modeStr = mode == .cleanup ? "cleanup" : "normal"
+        logger.info("Recording stopped - \(modeStr) mode", category: "Recording")
         
         // Show transcribing state immediately for user feedback
         updateMenuBarIcon(isRecording: false, isTranscribing: true)
@@ -235,53 +264,86 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         if trimmedTranscript.isEmpty {
             logger.warning("Transcription completed but result is empty", category: "Recording")
-        } else {
-            logger.success("Transcription completed: \(trimmedTranscript.count) characters", category: "Recording")
+            DispatchQueue.main.async {
+                self.updateStatus(.ready)
+            }
+            return
         }
         
-        // Update UI on main thread
+        logger.success("Transcription completed: \(trimmedTranscript.count) characters", category: "Recording")
+        
+        // Check if we need to run cleanup
+        if currentRecordingMode == .cleanup {
+            logger.info("Cleanup mode - sending to LLM for cleanup", category: "Recording")
+            
+            // Show "Cleaning up..." status
+            DispatchQueue.main.async {
+                self.updateStatus(.cleaningUp)
+            }
+            
+            let prompt = settingsManager.cleanupPrompt
+            let model = settingsManager.cleanupModel
+            
+            llmClient.cleanupText(trimmedTranscript, prompt: prompt, model: model) { [weak self] cleanedText in
+                guard let self = self else { return }
+                logger.success("Cleanup completed: \(cleanedText.count) characters", category: "Recording")
+                self.finalizeTranscription(cleanedText, wasCleanedUp: true)
+            }
+        } else {
+            // Normal mode - proceed directly to paste
+            finalizeTranscription(trimmedTranscript, wasCleanedUp: false)
+        }
+    }
+    
+    private func finalizeTranscription(_ text: String, wasCleanedUp: Bool) {
+        let logger = DiagnosticLogger.shared
+        
+        // Update UI on main thread - back to ready
         DispatchQueue.main.async {
-            self.updateMenuBarIcon(isRecording: false, isTranscribing: false)
+            self.updateStatus(.ready)
         }
         
         // Add to history
-        if !trimmedTranscript.isEmpty {
-            settingsManager.addTranscription(trimmedTranscript)
-            updateLastTranscriptionMenuItem()
-            
-            // Check if copy to clipboard is enabled
-            if settingsManager.copyToClipboard {
-                // Check if auto-paste is enabled
-                if settingsManager.autoPaste {
-                    // Check accessibility permission before attempting auto-paste
-                    if permissionManager.checkAccessibilityPermission() {
-                        clipboardUtils.pasteTextAutomatically(text: trimmedTranscript)
-                        self.showSimpleNotification(title: "✅ Auto-Pasted", body: trimmedTranscript)
-                    } else {
-                        // No accessibility permission - just copy to clipboard
-                        DispatchQueue.main.async {
-                            let pasteboard = NSPasteboard.general
-                            pasteboard.clearContents()
-                            pasteboard.setString(trimmedTranscript, forType: .string)
-                            
-                            self.showSimpleNotification(title: "📋 Copied to Clipboard", 
-                                                      body: "Grant Accessibility permission for auto-paste")
-                        }
-                    }
+        settingsManager.addTranscription(text)
+        updateLastTranscriptionMenuItem()
+        
+        let notificationPrefix = wasCleanedUp ? "✨" : "✅"
+        let notificationTitle = wasCleanedUp ? "\(notificationPrefix) Cleaned & Pasted" : "\(notificationPrefix) Auto-Pasted"
+        
+        // Check if copy to clipboard is enabled
+        if settingsManager.copyToClipboard {
+            // Check if auto-paste is enabled
+            if settingsManager.autoPaste {
+                // Check accessibility permission before attempting auto-paste
+                if permissionManager.checkAccessibilityPermission() {
+                    clipboardUtils.pasteTextAutomatically(text: text)
+                    self.showSimpleNotification(title: notificationTitle, body: text)
                 } else {
-                    // Just copy to clipboard without auto-pasting
+                    // No accessibility permission - just copy to clipboard
                     DispatchQueue.main.async {
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
-                        pasteboard.setString(trimmedTranscript, forType: .string)
+                        pasteboard.setString(text, forType: .string)
                         
-                        self.showSimpleNotification(title: "✅ Copied to Clipboard", body: trimmedTranscript)
+                        self.showSimpleNotification(title: "📋 Copied to Clipboard", 
+                                                  body: "Grant Accessibility permission for auto-paste")
                     }
                 }
             } else {
-                // Not copying to clipboard - just show notification
-                self.showSimpleNotification(title: "✅ Transcribed", body: trimmedTranscript)
+                // Just copy to clipboard without auto-pasting
+                DispatchQueue.main.async {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(text, forType: .string)
+                    
+                    let title = wasCleanedUp ? "✨ Cleaned & Copied" : "✅ Copied to Clipboard"
+                    self.showSimpleNotification(title: title, body: text)
+                }
             }
+        } else {
+            // Not copying to clipboard - just show notification
+            let title = wasCleanedUp ? "✨ Cleaned" : "✅ Transcribed"
+            self.showSimpleNotification(title: title, body: text)
         }
     }
     

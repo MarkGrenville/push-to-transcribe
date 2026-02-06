@@ -41,7 +41,7 @@ A macOS menu bar app that provides real-time voice transcription using OpenAI's 
 3. **Build the App**:
 
    ```bash
-   ./build_app.sh
+   ./scripts/build_app.sh
    ```
 
 4. **Install the App**:
@@ -56,11 +56,11 @@ A macOS menu bar app that provides real-time voice transcription using OpenAI's 
 5. **Test Global Hotkeys** (recommended):
 
    ```bash
-   ./test_hotkeys.sh
+   ./scripts/test_hotkeys.sh
    ```
 
 6. **Alternative Options**:
-   - **Quick run** (builds and launches): `./run.sh`
+   - **Quick run** (builds and launches): `./scripts/run.sh`
    - **Manual build**: `swift build && .build/release/MacWhisper`
    - **Xcode project**: `swift package generate-xcodeproj && open MacWhisper.xcodeproj`
 
@@ -161,7 +161,7 @@ The app includes a comprehensive settings window with three tabs:
    - Add MacWhisper to the list and ensure it's checked ✅
    - **Restart MacWhisper** after granting permissions
    - Check for conflicts with Spotlight (which also uses Control + Space by default)
-   - Run `./test_hotkeys.sh` for guided troubleshooting
+   - Run `./scripts/test_hotkeys.sh` for guided troubleshooting
 
 2. **Spotlight conflict with Control + Space**:
 

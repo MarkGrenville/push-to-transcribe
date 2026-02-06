@@ -39,6 +39,100 @@ class SettingsManager: ObservableObject {
         }
     }
     
+    // MARK: - Cleanup Hotkey Settings
+    
+    @Published var cleanupHotkeyEnabled: Bool = true {
+        didSet {
+            saveSettings()
+            hotkeyChanged?()
+        }
+    }
+    
+    @Published var cleanupHotkeyModifiers: NSEvent.ModifierFlags = .option {
+        didSet {
+            saveSettings()
+            hotkeyChanged?()
+        }
+    }
+    
+    @Published var cleanupHotkeyKeyCode: UInt16 = 49 { // Space key
+        didSet {
+            saveSettings()
+            hotkeyChanged?()
+        }
+    }
+    
+    // MARK: - Cleanup LLM Settings
+    
+    static let defaultCleanupPrompt = """
+Clean up the following transcription so it reads clearly and professionally.
+• Fix punctuation and sentence structure
+• Convert obvious lists into bullet points
+• Remove filler words and transcription artifacts
+• Do not change the meaning, tone, or intent
+• Do not add new content or rewrite creatively
+
+Output only the cleaned version.
+"""
+    
+    @Published var cleanupPrompt: String = SettingsManager.defaultCleanupPrompt {
+        didSet { 
+            saveSettings()
+            saveCleanupPromptToFile() // Also save to persistent file
+        }
+    }
+    
+    @Published var cleanupModel: String = "gpt-4o-mini" {
+        didSet { saveSettings() }
+    }
+    
+    // File-based storage for cleanup prompt (survives app reinstalls)
+    private static var appSupportDirectory: URL? {
+        let fileManager = FileManager.default
+        guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let appDir = appSupport.appendingPathComponent("PushToTranscribe")
+        
+        // Create directory if it doesn't exist
+        if !fileManager.fileExists(atPath: appDir.path) {
+            try? fileManager.createDirectory(at: appDir, withIntermediateDirectories: true)
+        }
+        
+        return appDir
+    }
+    
+    private static var cleanupPromptFileURL: URL? {
+        return appSupportDirectory?.appendingPathComponent("cleanup-prompt.txt")
+    }
+    
+    private func saveCleanupPromptToFile() {
+        guard let fileURL = SettingsManager.cleanupPromptFileURL else { return }
+        
+        do {
+            try cleanupPrompt.write(to: fileURL, atomically: true, encoding: .utf8)
+            print("💾 Saved cleanup prompt to: \(fileURL.path)")
+        } catch {
+            print("Failed to save cleanup prompt to file: \(error)")
+        }
+    }
+    
+    private func loadCleanupPromptFromFile() -> String? {
+        guard let fileURL = SettingsManager.cleanupPromptFileURL,
+              FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+        
+        do {
+            let prompt = try String(contentsOf: fileURL, encoding: .utf8)
+            print("📂 Loaded cleanup prompt from: \(fileURL.path)")
+            return prompt
+        } catch {
+            print("Failed to load cleanup prompt from file: \(error)")
+            return nil
+        }
+    }
+    
     @Published var transcriptionHistory: [TranscriptionEntry] = [] {
         didSet { saveTranscriptionHistory() }
     }
@@ -65,7 +159,13 @@ class SettingsManager: ObservableObject {
             "copyToClipboard": copyToClipboard,
             "autoPaste": autoPaste,
             "hotkeyModifiers": hotkeyModifiers.rawValue,
-            "hotkeyKeyCode": hotkeyKeyCode
+            "hotkeyKeyCode": hotkeyKeyCode,
+            // Cleanup hotkey settings
+            "cleanupHotkeyEnabled": cleanupHotkeyEnabled,
+            "cleanupHotkeyModifiers": cleanupHotkeyModifiers.rawValue,
+            "cleanupHotkeyKeyCode": cleanupHotkeyKeyCode,
+            "cleanupPrompt": cleanupPrompt,
+            "cleanupModel": cleanupModel
         ]
         
         UserDefaults.standard.set(settings, forKey: settingsKey)
@@ -102,6 +202,32 @@ class SettingsManager: ObservableObject {
         
         if let keyCode = settings["hotkeyKeyCode"] as? UInt16 {
             hotkeyKeyCode = keyCode
+        }
+        
+        // Cleanup hotkey settings
+        if let cleanupEnabled = settings["cleanupHotkeyEnabled"] as? Bool {
+            cleanupHotkeyEnabled = cleanupEnabled
+        }
+        
+        if let cleanupModifiers = settings["cleanupHotkeyModifiers"] as? UInt {
+            cleanupHotkeyModifiers = NSEvent.ModifierFlags(rawValue: cleanupModifiers)
+        }
+        
+        if let cleanupKeyCode = settings["cleanupHotkeyKeyCode"] as? UInt16 {
+            cleanupHotkeyKeyCode = cleanupKeyCode
+        }
+        
+        // Load cleanup prompt: File first (survives reinstalls), then UserDefaults, then default
+        if let filePrompt = loadCleanupPromptFromFile() {
+            cleanupPrompt = filePrompt
+        } else if let prompt = settings["cleanupPrompt"] as? String {
+            cleanupPrompt = prompt
+            // Migrate to file-based storage
+            saveCleanupPromptToFile()
+        }
+        
+        if let model = settings["cleanupModel"] as? String {
+            cleanupModel = model
         }
     }
     
@@ -155,14 +281,22 @@ class SettingsManager: ObservableObject {
     // MARK: - Helper Methods
     
     func getHotkeyDescription() -> String {
+        return formatHotkeyDescription(modifiers: hotkeyModifiers, keyCode: hotkeyKeyCode)
+    }
+    
+    func getCleanupHotkeyDescription() -> String {
+        return formatHotkeyDescription(modifiers: cleanupHotkeyModifiers, keyCode: cleanupHotkeyKeyCode)
+    }
+    
+    private func formatHotkeyDescription(modifiers: NSEvent.ModifierFlags, keyCode: UInt16) -> String {
         var parts: [String] = []
         
-        if hotkeyModifiers.contains(.control) { parts.append("Control") }
-        if hotkeyModifiers.contains(.option) { parts.append("Option") }
-        if hotkeyModifiers.contains(.command) { parts.append("Cmd") }
-        if hotkeyModifiers.contains(.shift) { parts.append("Shift") }
+        if modifiers.contains(.control) { parts.append("Control") }
+        if modifiers.contains(.option) { parts.append("Option") }
+        if modifiers.contains(.command) { parts.append("Cmd") }
+        if modifiers.contains(.shift) { parts.append("Shift") }
         
-        let keyName = keyCodeToString(hotkeyKeyCode)
+        let keyName = keyCodeToString(keyCode)
         parts.append(keyName)
         
         return parts.joined(separator: " + ")

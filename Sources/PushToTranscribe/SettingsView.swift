@@ -96,111 +96,146 @@ struct GeneralSettingsView: View {
 
 struct HotkeySettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
-    @State private var isRecordingHotkey = false
     @State private var hotkeyDisplay = "Control + Space"
+    @State private var cleanupHotkeyDisplay = "Option + Space"
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Hotkey Settings")
-                .font(.title2)
-                .bold()
-            
-            GroupBox(label: Text("Recording Hotkey")) {
-                VStack(alignment: .leading, spacing: 15) {
-                    HStack {
-                        Text("Current hotkey:")
-                        Spacer()
-                        Text(hotkeyDisplay)
-                            .font(.system(.body, design: .monospaced))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.gray.opacity(0.2))
-                            .cornerRadius(5)
-                    }
-                    
-                    Button(action: {
-                        isRecordingHotkey.toggle()
-                    }) {
-                        Text(isRecordingHotkey ? "Press new hotkey..." : "Change Hotkey")
-                            .foregroundColor(isRecordingHotkey ? .red : .blue)
-                    }
-                    .disabled(isRecordingHotkey)
-                    
-                    if isRecordingHotkey {
-                        Text("Press the key combination you want to use for recording")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                    
-                    Divider()
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Popular combinations:")
-                            .font(.caption)
-                            .bold()
-                        
+        ScrollView {
+            VStack(alignment: .leading, spacing: 15) {
+                Text("Hotkey Settings")
+                    .font(.title2)
+                    .bold()
+                
+                // Primary Hotkey
+                GroupBox(label: Text("Primary Hotkey (Transcribe Only)")) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Button("Control + Space") {
-                                setHotkey(modifiers: .control, keyCode: 49)
-                            }
-                            .buttonStyle(LinkButtonStyle())
-                            
-                            Button("Option + Space") {
-                                setHotkey(modifiers: .option, keyCode: 49)
-                            }
-                            .buttonStyle(LinkButtonStyle())
-                            
-                            Button("Cmd + Shift + R") {
-                                setHotkey(modifiers: [.command, .shift], keyCode: 15)
-                            }
-                            .buttonStyle(LinkButtonStyle())
+                            Text("Current hotkey:")
+                            Spacer()
+                            Text(hotkeyDisplay)
+                                .font(.system(.body, design: .monospaced))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.gray.opacity(0.2))
+                                .cornerRadius(5)
                         }
-                        .font(.caption)
+                        
+                        HStack(spacing: 8) {
+                            Text("Quick set:")
+                                .font(.caption)
+                            Button("Ctrl+Space") {
+                                setPrimaryHotkey(modifiers: .control, keyCode: 49)
+                            }
+                            .buttonStyle(LinkButtonStyle())
+                            .font(.caption)
+                            
+                            Button("Cmd+Shift+R") {
+                                setPrimaryHotkey(modifiers: [.command, .shift], keyCode: 15)
+                            }
+                            .buttonStyle(LinkButtonStyle())
+                            .font(.caption)
+                        }
                     }
+                    .padding(8)
                 }
-                .padding(10)
+                
+                // Cleanup Hotkey
+                GroupBox(label: Text("Cleanup Hotkey (Transcribe + Clean with AI)")) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Enable cleanup hotkey", isOn: $settingsManager.cleanupHotkeyEnabled)
+                        
+                        if settingsManager.cleanupHotkeyEnabled {
+                            HStack {
+                                Text("Current hotkey:")
+                                Spacer()
+                                Text(cleanupHotkeyDisplay)
+                                    .font(.system(.body, design: .monospaced))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.blue.opacity(0.2))
+                                    .cornerRadius(5)
+                            }
+                            
+                            HStack(spacing: 8) {
+                                Text("Quick set:")
+                                    .font(.caption)
+                                Button("Opt+Space") {
+                                    setCleanupHotkey(modifiers: .option, keyCode: 49)
+                                }
+                                .buttonStyle(LinkButtonStyle())
+                                .font(.caption)
+                                
+                                Button("Cmd+Shift+T") {
+                                    setCleanupHotkey(modifiers: [.command, .shift], keyCode: 17)
+                                }
+                                .buttonStyle(LinkButtonStyle())
+                                .font(.caption)
+                            }
+                            
+                            Divider()
+                            
+                            // Cleanup Model
+                            Picker("Cleanup Model:", selection: $settingsManager.cleanupModel) {
+                                Text("GPT-4o Mini (Fast)").tag("gpt-4o-mini")
+                                Text("GPT-4o (Best)").tag("gpt-4o")
+                                Text("GPT-4 Turbo").tag("gpt-4-turbo")
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            
+                            // Cleanup Prompt
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Text("Cleanup Prompt:")
+                                        .font(.caption)
+                                        .bold()
+                                    Spacer()
+                                    Button("Reset") {
+                                        settingsManager.cleanupPrompt = SettingsManager.defaultCleanupPrompt
+                                    }
+                                    .font(.caption)
+                                    .buttonStyle(LinkButtonStyle())
+                                }
+                                
+                                TextEditor(text: $settingsManager.cleanupPrompt)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .frame(height: 80)
+                                    .border(Color.gray.opacity(0.3), width: 1)
+                            }
+                            
+                            Text("The AI will use this prompt to clean up your transcribed text before pasting.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(8)
+                }
+                
+                Text("⚠️ Make sure your hotkeys don't conflict with other apps")
+                    .font(.caption)
+                    .foregroundColor(.orange)
             }
-            
-            Text("⚠️ Make sure your chosen hotkey doesn't conflict with other apps")
-                .font(.caption)
-                .foregroundColor(.orange)
-            
-            Spacer()
+            .padding(20)
         }
-        .padding(20)
         .onAppear {
-            updateHotkeyDisplay()
+            updateHotkeyDisplays()
         }
     }
     
-    private func setHotkey(modifiers: NSEvent.ModifierFlags, keyCode: UInt16) {
+    private func setPrimaryHotkey(modifiers: NSEvent.ModifierFlags, keyCode: UInt16) {
         settingsManager.hotkeyModifiers = modifiers
         settingsManager.hotkeyKeyCode = keyCode
-        updateHotkeyDisplay()
+        updateHotkeyDisplays()
     }
     
-    private func updateHotkeyDisplay() {
-        let modifiers = settingsManager.hotkeyModifiers
-        var parts: [String] = []
-        
-        if modifiers.contains(.control) { parts.append("Control") }
-        if modifiers.contains(.option) { parts.append("Option") }
-        if modifiers.contains(.command) { parts.append("Cmd") }
-        if modifiers.contains(.shift) { parts.append("Shift") }
-        
-        let keyName = keyCodeToString(settingsManager.hotkeyKeyCode)
-        parts.append(keyName)
-        
-        hotkeyDisplay = parts.joined(separator: " + ")
+    private func setCleanupHotkey(modifiers: NSEvent.ModifierFlags, keyCode: UInt16) {
+        settingsManager.cleanupHotkeyModifiers = modifiers
+        settingsManager.cleanupHotkeyKeyCode = keyCode
+        updateHotkeyDisplays()
     }
     
-    private func keyCodeToString(_ keyCode: UInt16) -> String {
-        switch keyCode {
-        case 49: return "Space"
-        case 15: return "R"
-        case 17: return "T"
-        default: return "Key \(keyCode)"
-        }
+    private func updateHotkeyDisplays() {
+        hotkeyDisplay = settingsManager.getHotkeyDescription()
+        cleanupHotkeyDisplay = settingsManager.getCleanupHotkeyDescription()
     }
 }
 
