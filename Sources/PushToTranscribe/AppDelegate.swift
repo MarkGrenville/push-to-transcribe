@@ -366,17 +366,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func showSettings() {
         if settingsWindow == nil {
-            let settingsView = SettingsView(settingsManager: settingsManager)
+            let settingsView = SettingsView(
+                settingsManager: settingsManager,
+                onCleanupText: { [weak self] text, completion in
+                    self?.cleanupTextFromHistory(text, completion: completion)
+                }
+            )
             let hostingController = NSHostingController(rootView: settingsView)
             
             settingsWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
             
-            settingsWindow?.title = "MacWhisper Settings"
+            settingsWindow?.title = "Push to Transcribe Settings"
             settingsWindow?.contentViewController = hostingController
             settingsWindow?.center()
             settingsWindow?.isReleasedWhenClosed = false
@@ -384,6 +389,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    private func cleanupTextFromHistory(_ text: String, completion: @escaping (String) -> Void) {
+        let logger = DiagnosticLogger.shared
+        logger.info("Cleaning up text from history", category: "LLM")
+        
+        let prompt = settingsManager.cleanupPrompt
+        let model = settingsManager.cleanupModel
+        
+        llmClient.cleanupText(text, prompt: prompt, model: model) { cleanedText in
+            logger.success("History cleanup completed: \(cleanedText.count) characters", category: "LLM")
+            completion(cleanedText)
+        }
     }
     
     @objc private func requestPermissions() {

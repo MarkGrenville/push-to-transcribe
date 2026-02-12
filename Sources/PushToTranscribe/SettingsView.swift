@@ -4,6 +4,7 @@ import AppKit
 struct SettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
     @State private var selectedTab = 0
+    var onCleanupText: ((String, @escaping (String) -> Void) -> Void)?
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -21,7 +22,7 @@ struct SettingsView: View {
                 }
                 .tag(1)
             
-            TranscriptionHistoryView(settingsManager: settingsManager)
+            TranscriptionHistoryView(settingsManager: settingsManager, onCleanupText: onCleanupText)
                 .tabItem {
                     Image(systemName: "doc.text")
                     Text("History")
@@ -242,6 +243,8 @@ struct HotkeySettingsView: View {
 struct TranscriptionHistoryView: View {
     @ObservedObject var settingsManager: SettingsManager
     @State private var searchText = ""
+    @State private var cleaningEntryId: UUID? = nil
+    var onCleanupText: ((String, @escaping (String) -> Void) -> Void)?
     
     var filteredTranscriptions: [TranscriptionEntry] {
         if searchText.isEmpty {
@@ -271,21 +274,49 @@ struct TranscriptionHistoryView: View {
             
             List {
                 ForEach(filteredTranscriptions) { entry in
-                    TranscriptionRowView(entry: entry, onCopy: { text in
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(text, forType: .string)
-                    })
+                    TranscriptionRowView(
+                        entry: entry,
+                        isCleaningUp: cleaningEntryId == entry.id,
+                        onCopy: { text in
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(text, forType: .string)
+                        },
+                        onCleanup: onCleanupText != nil ? { text in
+                            cleanupEntry(entry, text: text)
+                        } : nil
+                    )
                 }
             }
             .listStyle(PlainListStyle())
         }
         .padding(20)
     }
+    
+    private func cleanupEntry(_ entry: TranscriptionEntry, text: String) {
+        guard let onCleanupText = onCleanupText else { return }
+        
+        cleaningEntryId = entry.id
+        
+        onCleanupText(text) { cleanedText in
+            DispatchQueue.main.async {
+                // Add the cleaned text as a new entry at the top
+                settingsManager.addTranscription(cleanedText)
+                
+                // Copy to clipboard
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(cleanedText, forType: .string)
+                
+                cleaningEntryId = nil
+            }
+        }
+    }
 }
 
 struct TranscriptionRowView: View {
     let entry: TranscriptionEntry
+    var isCleaningUp: Bool = false
     let onCopy: (String) -> Void
+    var onCleanup: ((String) -> Void)? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -295,6 +326,25 @@ struct TranscriptionRowView: View {
                     .foregroundColor(.secondary)
                 
                 Spacer()
+                
+                if let onCleanup = onCleanup {
+                    if isCleaningUp {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                            Text("Cleaning...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } else {
+                        Button("Clean up") {
+                            onCleanup(entry.text)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                }
                 
                 Button("Copy") {
                     onCopy(entry.text)
