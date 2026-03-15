@@ -120,15 +120,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func setupManagers() {
-        // Initialize settings first
         settingsManager = SettingsManager()
         
         permissionManager = PermissionManager()
         audioManager = AudioRecordingManager()
-        let apiKey = "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"
+        let apiKey = settingsManager.apiKey
         whisperClient = WhisperClient(apiKey: apiKey, settingsManager: settingsManager)
         llmClient = LLMClient(apiKey: apiKey)
         clipboardUtils = ClipboardUtils()
+        
+        settingsManager.apiKeyChanged = { [weak self] in
+            guard let self = self else { return }
+            let newKey = self.settingsManager.apiKey
+            self.whisperClient.updateAPIKey(newKey)
+            self.llmClient.updateAPIKey(newKey)
+        }
         
         // Check permissions before setting up hotkeys
         checkPermissionsOnStartup()

@@ -15,26 +15,33 @@ struct SettingsView: View {
                 }
                 .tag(0)
             
+            APIKeySettingsView(settingsManager: settingsManager)
+                .tabItem {
+                    Image(systemName: "key")
+                    Text("API Key")
+                }
+                .tag(1)
+            
             HotkeySettingsView(settingsManager: settingsManager)
                 .tabItem {
                     Image(systemName: "keyboard")
                     Text("Hotkeys")
                 }
-                .tag(1)
+                .tag(2)
             
             TranscriptionHistoryView(settingsManager: settingsManager, onCleanupText: onCleanupText)
                 .tabItem {
                     Image(systemName: "doc.text")
                     Text("History")
                 }
-                .tag(2)
+                .tag(3)
             
             DiagnosticsView()
                 .tabItem {
                     Image(systemName: "stethoscope")
                     Text("Diagnostics")
                 }
-                .tag(3)
+                .tag(4)
         }
         .frame(width: 600, height: 450)
     }
@@ -92,6 +99,98 @@ struct GeneralSettingsView: View {
             Spacer()
         }
         .padding(20)
+    }
+}
+
+struct APIKeySettingsView: View {
+    @ObservedObject var settingsManager: SettingsManager
+    @State private var keyInput: String = ""
+    @State private var isRevealed: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("OpenAI API Key")
+                .font(.title2)
+                .bold()
+            
+            GroupBox(label: Text("API Key")) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Your API key is stored securely in the macOS Keychain and never saved to disk.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        if isRevealed {
+                            TextField("sk-proj-...", text: $keyInput)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(.body, design: .monospaced))
+                        } else {
+                            SecureField("sk-proj-...", text: $keyInput)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        
+                        Button(action: { isRevealed.toggle() }) {
+                            Image(systemName: isRevealed ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                    }
+                    
+                    HStack {
+                        Button("Save Key") {
+                            settingsManager.apiKey = keyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                        .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        
+                        if settingsManager.hasValidAPIKey {
+                            Button("Clear Key") {
+                                keyInput = ""
+                                settingsManager.apiKey = ""
+                            }
+                            .foregroundColor(.red)
+                        }
+                        
+                        Spacer()
+                        
+                        if settingsManager.hasValidAPIKey {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Key configured")
+                                    .foregroundColor(.green)
+                            }
+                            .font(.caption)
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("No API key set")
+                                    .foregroundColor(.orange)
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+                .padding(10)
+            }
+            
+            GroupBox(label: Text("How to get an API key")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("1. Go to platform.openai.com")
+                    Text("2. Sign in or create an account")
+                    Text("3. Navigate to API Keys")
+                    Text("4. Create a new secret key and paste it above")
+                }
+                .font(.caption)
+                .padding(10)
+            }
+            
+            Spacer()
+        }
+        .padding(20)
+        .onAppear {
+            keyInput = settingsManager.apiKey
+        }
     }
 }
 

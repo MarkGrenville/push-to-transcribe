@@ -1,44 +1,44 @@
 #!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+APP_NAME="PushToTranscribe"
+APP_BUNDLE="$PROJECT_DIR/$APP_NAME.app"
+
+cd "$PROJECT_DIR"
 
 echo "🔨 Building Push to Transcribe.app..."
 
-# Close the app if it's running
 echo "🛑 Closing Push to Transcribe if running..."
-pkill -x "PushToTranscribe" 2>/dev/null
+pkill -x "$APP_NAME" 2>/dev/null || true
 sleep 0.5
 
-# Clean previous builds
-rm -rf PushToTranscribe.app/Contents/MacOS/PushToTranscribe
-
-# Build the Swift package
 echo "⚙️  Compiling Swift code..."
 swift build --configuration release
 
-if [ $? -ne 0 ]; then
-    echo "❌ Build failed!"
-    exit 1
-fi
-
-# Copy the executable to the app bundle
 echo "📦 Creating app bundle..."
-cp .build/release/PushToTranscribe PushToTranscribe.app/Contents/MacOS/
+rm -rf "$APP_BUNDLE"
+mkdir -p "$APP_BUNDLE/Contents/MacOS"
+mkdir -p "$APP_BUNDLE/Contents/Resources"
 
-# Make the executable... executable
-chmod +x PushToTranscribe.app/Contents/MacOS/PushToTranscribe
+cp ".build/release/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
+chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
-echo "✅ Build complete!"
+cp "MacWhisper.app/Contents/Info.plist" "$APP_BUNDLE/Contents/"
 
-# Install to Applications
+cp "Sources/PushToTranscribe/Resources/MacWhisper.entitlements" \
+   "$APP_BUNDLE/Contents/Resources/PushToTranscribe.entitlements"
+
+echo "✅ Build complete: $APP_BUNDLE"
+
 echo "📲 Installing to /Applications..."
-rm -rf /Applications/PushToTranscribe.app
-cp -r PushToTranscribe.app /Applications/
+rm -rf "/Applications/$APP_NAME.app"
+cp -r "$APP_BUNDLE" "/Applications/"
 
-echo "✅ Installed to /Applications!"
-
-# Launch the app
 echo "🚀 Launching Push to Transcribe..."
 sleep 0.5
-open /Applications/PushToTranscribe.app
+open "/Applications/$APP_NAME.app"
 
 echo ""
 echo "✅ Push to Transcribe is now running!"
@@ -50,4 +50,4 @@ echo "   3. Click '+' and re-add /Applications/PushToTranscribe.app"
 echo "   4. Restart the app"
 echo ""
 echo "   This is a macOS security feature - when an app's executable changes,"
-echo "   you may need to re-grant accessibility permissions." 
+echo "   you may need to re-grant accessibility permissions."

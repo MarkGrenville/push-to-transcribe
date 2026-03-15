@@ -21,4 +21,5 @@ Packages/
 # App bundles (built locally)
 *.app/
 
-
+# DMG exports
+exports/

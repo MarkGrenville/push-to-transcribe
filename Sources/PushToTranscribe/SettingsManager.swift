@@ -1,9 +1,29 @@
 import Foundation
 import AppKit
 import Combine
+import Security
 
 class SettingsManager: ObservableObject {
+    // MARK: - Keychain Constants
+    private static let keychainService = "com.example.pushtotranscribe"
+    private static let keychainAccountAPIKey = "openai-api-key"
+    
     // Published properties for UI binding
+    @Published var apiKey: String = "" {
+        didSet {
+            if oldValue != apiKey {
+                Self.saveToKeychain(apiKey)
+                apiKeyChanged?()
+            }
+        }
+    }
+    
+    var apiKeyChanged: (() -> Void)?
+    
+    var hasValidAPIKey: Bool {
+        return !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
     // Default to the fastest model for best push-to-talk experience
     @Published var transcriptionModel: String = "gpt-4o-mini-transcribe" {
         didSet { saveSettings() }
@@ -145,8 +165,54 @@ Output only the cleaned version.
     private let maxHistoryCount = 100
     
     init() {
+        // Load API key from Keychain before other settings
+        apiKey = Self.loadFromKeychain() ?? ""
         loadSettings()
         loadTranscriptionHistory()
+    }
+    
+    // MARK: - Keychain Helpers
+    
+    static func saveToKeychain(_ apiKey: String) {
+        let data = apiKey.data(using: .utf8)!
+        
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccountAPIKey
+        ]
+        
+        SecItemDelete(query as CFDictionary)
+        
+        if apiKey.isEmpty { return }
+        
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("Keychain save failed: \(status)")
+        }
+    }
+    
+    static func loadFromKeychain() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccountAPIKey,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        
+        return String(data: data, encoding: .utf8)
     }
     
     // MARK: - Settings Persistence

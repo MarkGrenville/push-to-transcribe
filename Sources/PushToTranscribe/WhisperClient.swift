@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 class WhisperClient {
-    private let apiKey: String
+    private var apiKey: String
     private let apiURL = "https://api.openai.com/v1/audio/transcriptions"
     private var accumulatedTranscript = ""
     private var audioBuffer = Data()
@@ -10,16 +10,26 @@ class WhisperClient {
     private let logger = DiagnosticLogger.shared
     private var requestStartTime: Date?
     
-    // Callback for when transcription is complete
     var onTranscriptionComplete: ((String) -> Void)?
     
     init(apiKey: String, settingsManager: SettingsManager) {
         self.apiKey = apiKey
         self.settingsManager = settingsManager
         
-        // Log API key status (masked for security)
-        let maskedKey = apiKey.prefix(10) + "..." + apiKey.suffix(4)
-        logger.info("WhisperClient initialized with API key: \(maskedKey)", category: "API")
+        if !apiKey.isEmpty {
+            let maskedKey = apiKey.prefix(10) + "..." + apiKey.suffix(4)
+            logger.info("WhisperClient initialized with API key: \(maskedKey)", category: "API")
+        } else {
+            logger.warning("WhisperClient initialized without API key - set one in Settings", category: "API")
+        }
+    }
+    
+    func updateAPIKey(_ newKey: String) {
+        apiKey = newKey
+        if !newKey.isEmpty {
+            let maskedKey = newKey.prefix(10) + "..." + newKey.suffix(4)
+            logger.info("WhisperClient API key updated: \(maskedKey)", category: "API")
+        }
     }
     
     func accumulateAudio(audioData: Data) {
@@ -28,6 +38,12 @@ class WhisperClient {
     }
     
     func processAccumulatedAudio() {
+        guard !apiKey.isEmpty else {
+            logger.error("No API key configured - go to Settings > API Key to set one", category: "API")
+            onTranscriptionComplete?("")
+            return
+        }
+        
         guard !audioBuffer.isEmpty else {
             logger.warning("No audio data to process - buffer is empty", category: "Audio")
             onTranscriptionComplete?("")

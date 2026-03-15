@@ -1,14 +1,26 @@
 import Foundation
 
 class LLMClient {
-    private let apiKey: String
+    private var apiKey: String
     private let apiURL = "https://api.openai.com/v1/chat/completions"
     private let logger = DiagnosticLogger.shared
     
     init(apiKey: String) {
         self.apiKey = apiKey
-        let maskedKey = apiKey.prefix(10) + "..." + apiKey.suffix(4)
-        logger.info("LLMClient initialized with API key: \(maskedKey)", category: "LLM")
+        if !apiKey.isEmpty {
+            let maskedKey = apiKey.prefix(10) + "..." + apiKey.suffix(4)
+            logger.info("LLMClient initialized with API key: \(maskedKey)", category: "LLM")
+        } else {
+            logger.warning("LLMClient initialized without API key - set one in Settings", category: "LLM")
+        }
+    }
+    
+    func updateAPIKey(_ newKey: String) {
+        apiKey = newKey
+        if !newKey.isEmpty {
+            let maskedKey = newKey.prefix(10) + "..." + newKey.suffix(4)
+            logger.info("LLMClient API key updated: \(maskedKey)", category: "LLM")
+        }
     }
     
     func cleanupText(_ text: String, prompt: String, model: String, completion: @escaping (String) -> Void) {
