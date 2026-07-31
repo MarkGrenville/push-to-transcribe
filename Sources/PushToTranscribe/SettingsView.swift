@@ -59,13 +59,14 @@ struct GeneralSettingsView: View {
             GroupBox(label: Text("Transcription Model")) {
                 VStack(alignment: .leading, spacing: 10) {
                     Picker("Model:", selection: $settingsManager.transcriptionModel) {
-                        Text("GPT-4o Mini Transcribe (Fastest) ⚡").tag("gpt-4o-mini-transcribe")
-                        Text("GPT-4o Transcribe (Best Quality) 🎯").tag("gpt-4o-transcribe")
+                        Text("GPT Transcribe (Latest, Best Quality) 🎯").tag("gpt-transcribe")
+                        Text("GPT-4o Mini Transcribe (Fast) ⚡").tag("gpt-4o-mini-transcribe")
+                        Text("GPT-4o Transcribe").tag("gpt-4o-transcribe")
                         Text("Whisper-1 (Legacy)").tag("whisper-1")
                     }
                     .pickerStyle(RadioGroupPickerStyle())
                     
-                    Text("GPT-4o Mini is the fastest option. GPT-4o offers best accuracy. Whisper-1 is the original model.")
+                    Text("GPT Transcribe is the latest model with best accuracy across accents, languages, and noisy audio. GPT-4o Mini is faster but less accurate.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

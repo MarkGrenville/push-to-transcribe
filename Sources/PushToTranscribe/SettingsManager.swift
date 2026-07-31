@@ -24,8 +24,8 @@ class SettingsManager: ObservableObject {
         return !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
-    // Default to the fastest model for best push-to-talk experience
-    @Published var transcriptionModel: String = "gpt-4o-mini-transcribe" {
+    // Default to the latest and most accurate model
+    @Published var transcriptionModel: String = "gpt-transcribe" {
         didSet { saveSettings() }
     }
     

@@ -88,7 +88,7 @@ class WhisperClient {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 60 // 60 second timeout
         
-        let model = settingsManager?.transcriptionModel ?? "gpt-4o-mini-transcribe"
+        let model = settingsManager?.transcriptionModel ?? "gpt-transcribe"
         let language = settingsManager?.language ?? "en"
         
         logger.info("Sending API request to OpenAI", category: "API")
@@ -224,18 +224,23 @@ class WhisperClient {
     private func createMultipartBody(audioData: Data, boundary: String) -> Data {
         var body = Data()
         
-        // Add model parameter - default to fastest model
-        let model = settingsManager?.transcriptionModel ?? "gpt-4o-mini-transcribe"
+        let model = settingsManager?.transcriptionModel ?? "gpt-transcribe"
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
         body.append("\(model)\r\n".data(using: .utf8)!)
         
-        // Add language parameter if specified
+        // gpt-transcribe uses "languages" (array); older models use "language" (singular)
         let language = settingsManager?.language ?? "en"
         if language != "auto" {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(language)\r\n".data(using: .utf8)!)
+            if model == "gpt-transcribe" {
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"languages[]\"\r\n\r\n".data(using: .utf8)!)
+                body.append("\(language)\r\n".data(using: .utf8)!)
+            } else {
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
+                body.append("\(language)\r\n".data(using: .utf8)!)
+            }
         }
         
         // Add response_format parameter
