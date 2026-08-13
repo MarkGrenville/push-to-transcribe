@@ -1,6 +1,19 @@
 import Foundation
 import AVFoundation
 
+enum APIErrorKind {
+    case quotaExceeded
+    case rateLimited
+    case authFailed
+    case networkError
+    case serverError
+    case other
+    
+    var isBillingRelated: Bool {
+        self == .quotaExceeded
+    }
+}
+
 class WhisperClient {
     private var apiKey: String
     private let apiURL = "https://api.openai.com/v1/audio/transcriptions"
@@ -9,8 +22,10 @@ class WhisperClient {
     private weak var settingsManager: SettingsManager?
     private let logger = DiagnosticLogger.shared
     private var requestStartTime: Date?
+    private(set) var currentSessionId: String?
     
     var onTranscriptionComplete: ((String) -> Void)?
+    var onAPIError: ((APIErrorKind, String) -> Void)?
     
     init(apiKey: String, settingsManager: SettingsManager) {
         self.apiKey = apiKey
@@ -73,6 +88,11 @@ class WhisperClient {
         
         logger.info("Created WAV file: \(wavData.count) bytes", category: "API")
         
+        // Archive the audio file
+        let sessionId = SettingsManager.generateSessionId()
+        currentSessionId = sessionId
+        settingsManager?.saveAudioToArchive(wavData: wavData, sessionId: sessionId)
+        
         // Create multipart form data
         let boundary = UUID().uuidString
         
@@ -120,24 +140,26 @@ class WhisperClient {
             if let error = error {
                 self.logger.error("Network error after \(duration)s: \(error.localizedDescription)", category: "API")
                 
-                // Check for specific error types
                 let nsError = error as NSError
+                var errorMessage = error.localizedDescription
                 if nsError.domain == NSURLErrorDomain {
                     switch nsError.code {
                     case NSURLErrorTimedOut:
-                        self.logger.error("Request timed out - server may be slow or unreachable", category: "API")
+                        errorMessage = "Request timed out"
                     case NSURLErrorNotConnectedToInternet:
-                        self.logger.error("No internet connection", category: "API")
+                        errorMessage = "No internet connection"
                     case NSURLErrorNetworkConnectionLost:
-                        self.logger.error("Network connection was lost", category: "API")
+                        errorMessage = "Network connection was lost"
                     case NSURLErrorSecureConnectionFailed:
-                        self.logger.error("SSL/TLS connection failed", category: "API")
+                        errorMessage = "SSL/TLS connection failed"
                     default:
-                        self.logger.error("NSURLError code: \(nsError.code)", category: "API")
+                        break
                     }
+                    self.logger.error(errorMessage, category: "API")
                 }
                 
                 DispatchQueue.main.async {
+                    self.onAPIError?(.networkError, errorMessage)
                     self.onTranscriptionComplete?("")
                 }
                 return
@@ -168,12 +190,37 @@ class WhisperClient {
             
             self.logger.info("Response body size: \(data.count) bytes", category: "API")
             
-            // Log raw response for non-200 status codes
+            // Handle non-200 status codes with error classification
             if httpResponse.statusCode != 200 {
+                var errorMessage = "API error (HTTP \(httpResponse.statusCode))"
+                var errorKind: APIErrorKind = .other
+                
                 if let responseString = String(data: data, encoding: .utf8) {
                     self.logger.error("Error response body: \(responseString)", category: "API")
+                    
+                    if let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorObj = jsonData["error"] as? [String: Any] {
+                        let message = errorObj["message"] as? String ?? ""
+                        let code = errorObj["code"] as? String ?? ""
+                        let type = errorObj["type"] as? String ?? ""
+                        errorMessage = message
+                        
+                        if code == "insufficient_quota" || type == "insufficient_quota"
+                            || message.lowercased().contains("quota") || message.lowercased().contains("exceeded your current billing")
+                            || message.lowercased().contains("billing") {
+                            errorKind = .quotaExceeded
+                        } else if httpResponse.statusCode == 429 {
+                            errorKind = .rateLimited
+                        } else if httpResponse.statusCode == 401 {
+                            errorKind = .authFailed
+                        } else if httpResponse.statusCode >= 500 {
+                            errorKind = .serverError
+                        }
+                    }
                 }
+                
                 DispatchQueue.main.async {
+                    self.onAPIError?(errorKind, errorMessage)
                     self.onTranscriptionComplete?("")
                 }
                 return
@@ -278,7 +325,14 @@ class WhisperClient {
                     let code = error["code"] as? String ?? "none"
                     logger.error("API Error - Type: \(type), Code: \(code), Message: \(message)", category: "API")
                     
+                    var errorKind: APIErrorKind = .other
+                    if code == "insufficient_quota" || type == "insufficient_quota"
+                        || message.lowercased().contains("quota") || message.lowercased().contains("billing") {
+                        errorKind = .quotaExceeded
+                    }
+                    
                     DispatchQueue.main.async {
+                        self.onAPIError?(errorKind, message)
                         self.onTranscriptionComplete?("")
                     }
                     return

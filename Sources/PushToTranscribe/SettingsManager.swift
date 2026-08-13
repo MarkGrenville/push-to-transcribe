@@ -107,7 +107,7 @@ Output only the cleaned version.
     }
     
     // File-based storage for cleanup prompt (survives app reinstalls)
-    private static var appSupportDirectory: URL? {
+    static var appSupportDirectory: URL? {
         let fileManager = FileManager.default
         guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
@@ -120,6 +120,105 @@ Output only the cleaned version.
         }
         
         return appDir
+    }
+    
+    // MARK: - Voice Archive
+    
+    private static var archiveAudioDirectory: URL? {
+        guard let base = appSupportDirectory else { return nil }
+        let dir = base.appendingPathComponent("voice-archive/audio")
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }
+    
+    private static var archiveTranscriptionDirectory: URL? {
+        guard let base = appSupportDirectory else { return nil }
+        let dir = base.appendingPathComponent("voice-archive/transcriptions")
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }
+    
+    static func generateSessionId() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        return formatter.string(from: Date())
+    }
+    
+    func saveAudioToArchive(wavData: Data, sessionId: String) {
+        guard let dir = SettingsManager.archiveAudioDirectory else {
+            print("Failed to get archive audio directory")
+            return
+        }
+        let fileURL = dir.appendingPathComponent("\(sessionId).wav")
+        do {
+            try wavData.write(to: fileURL)
+            let logger = DiagnosticLogger.shared
+            logger.info("Archived audio: \(fileURL.lastPathComponent) (\(wavData.count) bytes)", category: "Archive")
+        } catch {
+            print("Failed to archive audio: \(error)")
+        }
+    }
+    
+    func saveTranscriptionToArchive(text: String, sessionId: String) {
+        guard let dir = SettingsManager.archiveTranscriptionDirectory else {
+            print("Failed to get archive transcription directory")
+            return
+        }
+        let fileURL = dir.appendingPathComponent("\(sessionId).txt")
+        do {
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            let logger = DiagnosticLogger.shared
+            logger.info("Archived transcription: \(fileURL.lastPathComponent)", category: "Archive")
+        } catch {
+            print("Failed to archive transcription: \(error)")
+        }
+    }
+    
+    struct ArchiveStats {
+        var audioFileCount: Int = 0
+        var transcriptionFileCount: Int = 0
+        var totalBytes: UInt64 = 0
+        
+        var formattedSize: String {
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .file
+            return formatter.string(fromByteCount: Int64(totalBytes))
+        }
+    }
+    
+    func getArchiveStats() -> ArchiveStats {
+        var stats = ArchiveStats()
+        let fileManager = FileManager.default
+        
+        if let audioDir = SettingsManager.archiveAudioDirectory {
+            let files = (try? fileManager.contentsOfDirectory(atPath: audioDir.path)) ?? []
+            stats.audioFileCount = files.filter { $0.hasSuffix(".wav") }.count
+            for file in files {
+                let path = audioDir.appendingPathComponent(file).path
+                if let attrs = try? fileManager.attributesOfItem(atPath: path),
+                   let size = attrs[.size] as? UInt64 {
+                    stats.totalBytes += size
+                }
+            }
+        }
+        
+        if let transcriptionDir = SettingsManager.archiveTranscriptionDirectory {
+            let files = (try? fileManager.contentsOfDirectory(atPath: transcriptionDir.path)) ?? []
+            stats.transcriptionFileCount = files.filter { $0.hasSuffix(".txt") }.count
+            for file in files {
+                let path = transcriptionDir.appendingPathComponent(file).path
+                if let attrs = try? fileManager.attributesOfItem(atPath: path),
+                   let size = attrs[.size] as? UInt64 {
+                    stats.totalBytes += size
+                }
+            }
+        }
+        
+        return stats
     }
     
     private static var cleanupPromptFileURL: URL? {

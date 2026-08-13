@@ -49,12 +49,53 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
+    @State private var archiveStats = SettingsManager.ArchiveStats()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("General Settings")
                 .font(.title2)
                 .bold()
+            
+            GroupBox(label: Text("Voice Archive")) {
+                HStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "waveform")
+                                .foregroundColor(.blue)
+                            Text("\(archiveStats.audioFileCount) recordings")
+                        }
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.green)
+                            Text("\(archiveStats.transcriptionFileCount) transcriptions")
+                        }
+                    }
+                    .font(.system(.body))
+                    
+                    Divider()
+                        .frame(height: 30)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(archiveStats.formattedSize)
+                            .font(.system(.title3, design: .rounded).bold())
+                        Text("disk usage")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button("Reveal in Finder") {
+                        if let dir = SettingsManager.appSupportDirectory {
+                            let archiveDir = dir.appendingPathComponent("voice-archive")
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: archiveDir.path)
+                        }
+                    }
+                    .font(.caption)
+                }
+                .padding(10)
+            }
             
             GroupBox(label: Text("Transcription Model")) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -100,6 +141,9 @@ struct GeneralSettingsView: View {
             Spacer()
         }
         .padding(20)
+        .onAppear {
+            archiveStats = settingsManager.getArchiveStats()
+        }
     }
 }
 

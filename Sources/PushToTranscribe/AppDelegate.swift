@@ -15,6 +15,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsManager: SettingsManager!
     private var settingsWindow: NSWindow?
     private var currentRecordingMode: HotkeyType = .normal
+    private var errorMenuItem: NSMenuItem!
+    private var billingMenuItem: NSMenuItem!
+    private var errorSeparator: NSMenuItem!
+    private var isInErrorState = false
+    private static let billingURL = "https://platform.openai.com/settings/organization/billing/overview"
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         let logger = DiagnosticLogger.shared
@@ -45,6 +50,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
         
+        // Error items (hidden by default, shown on API errors)
+        errorSeparator = NSMenuItem.separator()
+        errorSeparator.isHidden = true
+        menu.addItem(errorSeparator)
+        
+        errorMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        errorMenuItem.isEnabled = false
+        errorMenuItem.isHidden = true
+        menu.addItem(errorMenuItem)
+        
+        billingMenuItem = NSMenuItem(title: "Top Up OpenAI Credits...", action: #selector(openBilling), keyEquivalent: "")
+        billingMenuItem.isHidden = true
+        menu.addItem(billingMenuItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         lastTranscriptionMenuItem = NSMenuItem(title: "No transcription yet", action: #selector(copyLastTranscription), keyEquivalent: "")
@@ -67,6 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case recording
         case transcribing
         case cleaningUp
+        case apiError(String)
     }
     
     private func updateMenuBarIcon(isRecording: Bool) {
@@ -90,30 +110,56 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let symbolName: String
             let tooltip: String
             let statusText: String
+            var useRedIcon = false
             
             switch status {
             case .recording:
-                symbolName = "mic.fill"  // Filled mic while recording
+                symbolName = "mic.fill"
                 tooltip = "Push to Transcribe - Recording... (Release to stop)"
                 statusText = "Recording..."
             case .transcribing:
-                symbolName = "waveform"  // Waveform while transcribing
+                symbolName = "waveform"
                 tooltip = "Push to Transcribe - Transcribing audio..."
                 statusText = "Transcribing..."
             case .cleaningUp:
-                symbolName = "sparkles"  // Sparkles while AI is cleaning up
+                symbolName = "sparkles"
                 tooltip = "Push to Transcribe - Cleaning up with AI..."
                 statusText = "Cleaning up..."
+            case .apiError(let message):
+                symbolName = "exclamationmark.triangle.fill"
+                let short = message.count > 60 ? String(message.prefix(60)) + "..." : message
+                tooltip = "Push to Transcribe - API Error: \(short)"
+                statusText = "API Error"
+                useRedIcon = true
             case .ready:
-                symbolName = "mic"  // Outline mic when ready
+                symbolName = "mic"
                 tooltip = "Push to Transcribe - Voice Transcription (Hold Control+Space to record)"
                 statusText = "Ready"
             }
             
-            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: statusText) {
-                image.isTemplate = true
-                self.statusItem.button?.image = image
+            if useRedIcon {
+                if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: statusText) {
+                    if #available(macOS 12.0, *) {
+                        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+                        if let colored = image.withSymbolConfiguration(config) {
+                            colored.isTemplate = false
+                            self.statusItem.button?.image = colored
+                        } else {
+                            image.isTemplate = false
+                            self.statusItem.button?.image = image
+                        }
+                    } else {
+                        image.isTemplate = false
+                        self.statusItem.button?.image = image
+                    }
+                }
+            } else {
+                if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: statusText) {
+                    image.isTemplate = true
+                    self.statusItem.button?.image = image
+                }
             }
+            
             self.statusItem.button?.toolTip = tooltip
             self.statusMenuItem.title = statusText
         }
@@ -169,6 +215,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let logger = DiagnosticLogger.shared
             logger.debug("onTranscriptionComplete callback fired", category: "Recording")
             self?.handleTranscriptionComplete(finalTranscript)
+        }
+        
+        // Setup API error callback
+        whisperClient.onAPIError = { [weak self] errorKind, message in
+            self?.handleAPIError(errorKind, message: message)
         }
         
         // Listen for hotkey changes
@@ -264,19 +315,89 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    private func handleAPIError(_ errorKind: APIErrorKind, message: String) {
+        let logger = DiagnosticLogger.shared
+        logger.error("API error surfaced to user: \(message)", category: "App")
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.showAPIError(errorKind, message: message)
+        }
+        
+        let notificationTitle: String
+        let notificationBody: String
+        
+        if errorKind.isBillingRelated {
+            notificationTitle = "OpenAI Credits Exhausted"
+            notificationBody = "Your API credits have run out. Top up to continue transcribing."
+        } else {
+            notificationTitle = "Transcription Failed"
+            notificationBody = message
+        }
+        
+        showSimpleNotification(title: notificationTitle, body: notificationBody)
+    }
+    
+    private func showAPIError(_ errorKind: APIErrorKind, message: String) {
+        isInErrorState = true
+        
+        let displayMessage: String
+        if errorKind.isBillingRelated {
+            displayMessage = "OpenAI credits exhausted"
+        } else {
+            let short = message.count > 50 ? String(message.prefix(50)) + "..." : message
+            displayMessage = short
+        }
+        
+        updateStatus(.apiError(displayMessage))
+        
+        let errorAttr = NSMutableAttributedString(string: displayMessage)
+        errorAttr.addAttribute(.foregroundColor, value: NSColor.systemRed, range: NSRange(location: 0, length: errorAttr.length))
+        errorMenuItem.attributedTitle = errorAttr
+        errorMenuItem.isHidden = false
+        errorSeparator.isHidden = false
+        
+        billingMenuItem.isHidden = !errorKind.isBillingRelated
+    }
+    
+    private func clearAPIError() {
+        guard isInErrorState else { return }
+        isInErrorState = false
+        errorMenuItem.isHidden = true
+        billingMenuItem.isHidden = true
+        errorSeparator.isHidden = true
+    }
+    
+    @objc private func openBilling() {
+        if let url = URL(string: AppDelegate.billingURL) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
     private func handleTranscriptionComplete(_ finalTranscript: String) {
         let logger = DiagnosticLogger.shared
         let trimmedTranscript = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         
         if trimmedTranscript.isEmpty {
             logger.warning("Transcription completed but result is empty", category: "Recording")
-            DispatchQueue.main.async {
-                self.updateStatus(.ready)
+            if !isInErrorState {
+                DispatchQueue.main.async {
+                    self.updateStatus(.ready)
+                }
             }
             return
         }
         
+        // Successful transcription clears any previous error state
+        DispatchQueue.main.async { [weak self] in
+            self?.clearAPIError()
+        }
+        
         logger.success("Transcription completed: \(trimmedTranscript.count) characters", category: "Recording")
+        
+        // Archive the raw transcription (before any AI cleanup)
+        if let sessionId = whisperClient.currentSessionId {
+            settingsManager.saveTranscriptionToArchive(text: trimmedTranscript, sessionId: sessionId)
+        }
         
         // Check if we need to run cleanup
         if currentRecordingMode == .cleanup {
