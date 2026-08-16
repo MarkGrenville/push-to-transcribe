@@ -34,6 +34,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         logger.success("App initialized successfully", category: "App")
     }
     
+    func applicationWillTerminate(_ notification: Notification) {
+        hotkeyManager?.restoreSystemCapsLock()
+    }
+    
     private func setupStatusBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
@@ -42,7 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             image.isTemplate = true // Makes it adapt to menu bar appearance
             statusItem.button?.image = image
         }
-        statusItem.button?.toolTip = "Push to Transcribe - Voice Transcription (Hold Control+Space to record)"
+        statusItem.button?.toolTip = "Push to Transcribe - Voice Transcription (Hold Caps Lock to record)"
         
         let menu = NSMenu()
         
@@ -133,7 +137,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 useRedIcon = true
             case .ready:
                 symbolName = "mic"
-                tooltip = "Push to Transcribe - Voice Transcription (Hold Control+Space to record)"
+                let hotkey = self.settingsManager?.getHotkeyDescription() ?? "Caps Lock"
+                tooltip = "Push to Transcribe - Voice Transcription (Hold \(hotkey) to record)"
                 statusText = "Ready"
             }
             
@@ -486,7 +491,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         let alert = NSAlert()
         alert.messageText = "Push to Transcribe"
-        alert.informativeText = "Real-time voice transcription using OpenAI Whisper API\n\nPress and hold Control + Space to record and transcribe speech."
+        let hotkey = settingsManager.getHotkeyDescription()
+        alert.informativeText = "Real-time voice transcription using OpenAI Whisper API\n\nPress and hold \(hotkey) to record and transcribe speech."
         alert.alertStyle = .informational
         alert.runModal()
     }

@@ -268,6 +268,12 @@ struct HotkeySettingsView: View {
                         HStack(spacing: 8) {
                             Text("Quick set:")
                                 .font(.caption)
+                            Button("Caps Lock") {
+                                setPrimaryHotkey(modifiers: [], keyCode: SettingsManager.capsLockKeyCode)
+                            }
+                            .buttonStyle(LinkButtonStyle())
+                            .font(.caption)
+                            
                             Button("Ctrl+Space") {
                                 setPrimaryHotkey(modifiers: .control, keyCode: 49)
                             }
@@ -279,6 +285,13 @@ struct HotkeySettingsView: View {
                             }
                             .buttonStyle(LinkButtonStyle())
                             .font(.caption)
+                        }
+                        
+                        if settingsManager.isPrimaryCapsLock {
+                            Text("While this app is running, Caps Lock is remapped so the light and on-screen indicator stay off. Hold Caps Lock to transcribe; Option + Caps Lock to clean up. Quitting the app restores normal Caps Lock.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .padding(8)

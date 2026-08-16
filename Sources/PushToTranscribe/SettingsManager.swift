@@ -45,18 +45,30 @@ class SettingsManager: ObservableObject {
         didSet { saveSettings() }
     }
     
-    @Published var hotkeyModifiers: NSEvent.ModifierFlags = .control {
+    static let capsLockKeyCode: UInt16 = 57
+    private static let hotkeySettingsVersion = 2
+    
+    @Published var hotkeyModifiers: NSEvent.ModifierFlags = [] {
         didSet { 
             saveSettings()
             hotkeyChanged?()
         }
     }
     
-    @Published var hotkeyKeyCode: UInt16 = 49 { // Space key
+    @Published var hotkeyKeyCode: UInt16 = SettingsManager.capsLockKeyCode {
         didSet { 
             saveSettings()
             hotkeyChanged?()
         }
+    }
+    
+    var isPrimaryCapsLock: Bool {
+        Self.isCapsLockHotkey(keyCode: hotkeyKeyCode, modifiers: hotkeyModifiers)
+    }
+    
+    static func isCapsLockHotkey(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        let comboModifiers = modifiers.intersection([.command, .shift, .option, .control])
+        return keyCode == capsLockKeyCode && comboModifiers.isEmpty
     }
     
     // MARK: - Cleanup Hotkey Settings
@@ -323,6 +335,7 @@ Output only the cleaned version.
             "showNotifications": showNotifications,
             "copyToClipboard": copyToClipboard,
             "autoPaste": autoPaste,
+            "hotkeySettingsVersion": Self.hotkeySettingsVersion,
             "hotkeyModifiers": hotkeyModifiers.rawValue,
             "hotkeyKeyCode": hotkeyKeyCode,
             // Cleanup hotkey settings
@@ -361,12 +374,22 @@ Output only the cleaned version.
             autoPaste = paste
         }
         
-        if let modifiers = settings["hotkeyModifiers"] as? UInt {
+        if let modifiers = (settings["hotkeyModifiers"] as? NSNumber)?.uintValue {
             hotkeyModifiers = NSEvent.ModifierFlags(rawValue: modifiers)
         }
         
-        if let keyCode = settings["hotkeyKeyCode"] as? UInt16 {
+        if let keyCode = (settings["hotkeyKeyCode"] as? NSNumber)?.uint16Value {
             hotkeyKeyCode = keyCode
+        }
+        
+        // v2: Caps Lock is the default PTT key. Migrate the old Control+Space default.
+        let savedVersion = settings["hotkeySettingsVersion"] as? Int ?? 1
+        if savedVersion < 2 {
+            let oldDefaultModifiers = hotkeyModifiers.intersection([.command, .shift, .option, .control]) == [.control]
+            if oldDefaultModifiers && hotkeyKeyCode == 49 {
+                hotkeyModifiers = []
+                hotkeyKeyCode = Self.capsLockKeyCode
+            }
         }
         
         // Cleanup hotkey settings
@@ -374,11 +397,11 @@ Output only the cleaned version.
             cleanupHotkeyEnabled = cleanupEnabled
         }
         
-        if let cleanupModifiers = settings["cleanupHotkeyModifiers"] as? UInt {
+        if let cleanupModifiers = (settings["cleanupHotkeyModifiers"] as? NSNumber)?.uintValue {
             cleanupHotkeyModifiers = NSEvent.ModifierFlags(rawValue: cleanupModifiers)
         }
         
-        if let cleanupKeyCode = settings["cleanupHotkeyKeyCode"] as? UInt16 {
+        if let cleanupKeyCode = (settings["cleanupHotkeyKeyCode"] as? NSNumber)?.uint16Value {
             cleanupHotkeyKeyCode = cleanupKeyCode
         }
         
@@ -470,6 +493,7 @@ Output only the cleaned version.
     private func keyCodeToString(_ keyCode: UInt16) -> String {
         switch keyCode {
         case 49: return "Space"
+        case 57: return "Caps Lock"
         case 15: return "R"
         case 17: return "T"
         case 36: return "Enter"

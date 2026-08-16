@@ -10,42 +10,72 @@ class HotkeyManager {
     private var primaryHotKeyRef: EventHotKeyRef?
     private var cleanupHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var isRecording = false
+    private var capsLockDown = false
+    private var startedWithCapsLock = false
     private var currentHotkeyType: HotkeyType = .normal
     private weak var settingsManager: SettingsManager?
     private let logger = DiagnosticLogger.shared
     
-    // Callbacks now include the hotkey type
     var onHotkeyPressed: ((HotkeyType) -> Void)?
     var onHotkeyReleased: ((HotkeyType) -> Void)?
     
-    // Hotkey IDs
     private let primaryHotkeyId: UInt32 = 1
-    private let cleanupHotkeyId: UInt32 = 3  // Using 3 to avoid conflict with old id 2
+    private let cleanupHotkeyId: UInt32 = 3
     private let hotkeySignature: OSType = 0x4D574852
     
     init(settingsManager: SettingsManager) {
         self.settingsManager = settingsManager
-        setupCarbonHotkeys()
+        setupHotkeys()
     }
     
     deinit {
         cleanup()
     }
     
+    func updateHotkey() {
+        logger.info("Updating hotkey configuration...", category: "Hotkey")
+        print("🔄 Updating hotkey configuration...")
+        cleanup()
+        setupHotkeys()
+    }
+    
+    func restoreSystemCapsLock() {
+        CapsLockHIDRemap.restoreIfNeeded()
+    }
+    
+    private var isPrimaryCapsLock: Bool {
+        settingsManager?.isPrimaryCapsLock == true
+    }
+    
+    private func setupHotkeys() {
+        setupCarbonHotkeys()
+        
+        if isPrimaryCapsLock {
+            CapsLockHIDRemap.apply()
+            setupCapsLockTap()
+        } else {
+            registerPrimaryHotkey()
+        }
+        
+        registerCleanupHotkey()
+        setupKeyReleaseMonitoring()
+    }
+    
     private func setupCarbonHotkeys() {
-        // Create event handler for hotkey events
         var eventType = EventTypeSpec()
         eventType.eventClass = OSType(kEventClassKeyboard)
         eventType.eventKind = OSType(kEventHotKeyPressed)
         
-        let handler: EventHandlerProcPtr = { (nextHandler, theEvent, userData) -> OSStatus in
-            // Get the HotkeyManager instance from userData
+        let handler: EventHandlerProcPtr = { (_, theEvent, userData) -> OSStatus in
             let hotkeyManager = unsafeBitCast(userData, to: HotkeyManager.self)
             
-            // Get the hotkey ID from the event
             var hotkeyId = EventHotKeyID()
-            let result = GetEventParameter(theEvent, 
+            let result = GetEventParameter(theEvent,
                                          EventParamName(kEventParamDirectObject),
                                          EventParamType(typeEventHotKeyID),
                                          nil,
@@ -57,7 +87,6 @@ class HotkeyManager {
                 if !hotkeyManager.isRecording {
                     hotkeyManager.isRecording = true
                     
-                    // Determine which hotkey was pressed
                     if hotkeyId.id == hotkeyManager.primaryHotkeyId {
                         hotkeyManager.currentHotkeyType = .normal
                         hotkeyManager.logger.info("Primary hotkey pressed (normal mode)", category: "Hotkey")
@@ -75,7 +104,6 @@ class HotkeyManager {
             return noErr
         }
         
-        // Install the event handler
         let userData = unsafeBitCast(self, to: UnsafeMutableRawPointer.self)
         let status = InstallEventHandler(GetApplicationEventTarget(),
                                        handler,
@@ -86,17 +114,7 @@ class HotkeyManager {
         
         if status != noErr {
             logger.error("Failed to install event handler: \(status)", category: "Hotkey")
-            return
         }
-        
-        // Register primary hotkey
-        registerPrimaryHotkey()
-        
-        // Register cleanup hotkey if enabled
-        registerCleanupHotkey()
-        
-        // Setup key release monitoring with NSEvent since Carbon doesn't handle key release well
-        setupKeyReleaseMonitoring()
     }
     
     private func registerPrimaryHotkey() {
@@ -127,6 +145,15 @@ class HotkeyManager {
             return
         }
         
+        if settingsManager?.isPrimaryCapsLock == true,
+           SettingsManager.isCapsLockHotkey(
+            keyCode: settingsManager?.cleanupHotkeyKeyCode ?? 0,
+            modifiers: settingsManager?.cleanupHotkeyModifiers ?? []
+           ) {
+            logger.info("Cleanup hotkey skipped because Caps Lock is the primary hotkey", category: "Hotkey")
+            return
+        }
+        
         let hotkeyDownId = EventHotKeyID(signature: hotkeySignature, id: cleanupHotkeyId)
         let keyCode = settingsManager?.cleanupHotkeyKeyCode ?? 49
         let modifiers = settingsManager?.cleanupHotkeyModifiers ?? .option
@@ -148,14 +175,107 @@ class HotkeyManager {
         }
     }
     
+    private func setupCapsLockTap() {
+        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+            | CGEventMask(1 << CGEventType.keyUp.rawValue)
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            guard let refcon = refcon else {
+                return Unmanaged.passUnretained(event)
+            }
+            let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+            return manager.handleCapsLockTap(type: type, event: event)
+        }
+        
+        let tap = CGEvent.tapCreate(
+            tap: .cghidEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: callback,
+            userInfo: userInfo
+        ) ?? CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: callback,
+            userInfo: userInfo
+        )
+        
+        guard let tap = tap else {
+            logger.error("Failed to create Caps Lock event tap. Grant Accessibility permission and restart.", category: "Hotkey")
+            print("❌ Failed to create Caps Lock event tap — check Accessibility permission")
+            return
+        }
+        
+        eventTap = tap
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        
+        logger.success("Caps Lock→F18 intercept registered (hold to transcribe)", category: "Hotkey")
+        print("✅ Caps Lock→F18 intercept registered")
+    }
+    
+    private func handleCapsLockTap(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap = eventTap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                logger.warning("Caps Lock event tap was disabled; re-enabled", category: "Hotkey")
+            }
+            return Unmanaged.passUnretained(event)
+        }
+        
+        guard type == .keyDown || type == .keyUp else {
+            return Unmanaged.passUnretained(event)
+        }
+        
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        guard keyCode == CapsLockHIDRemap.f18KeyCode else {
+            return Unmanaged.passUnretained(event)
+        }
+        
+        let optionHeld = event.flags.contains(.maskAlternate)
+        DispatchQueue.main.async { [weak self] in
+            self?.handleCapsLock(isDown: type == .keyDown, optionHeld: optionHeld)
+        }
+        
+        // Swallow F18 so it never reaches other apps.
+        return nil
+    }
+    
+    private func handleCapsLock(isDown: Bool, optionHeld: Bool) {
+        guard isPrimaryCapsLock else { return }
+        guard isDown != capsLockDown else { return }
+        capsLockDown = isDown
+        
+        if isDown {
+            guard !isRecording else { return }
+            isRecording = true
+            startedWithCapsLock = true
+            let useCleanup = optionHeld && settingsManager?.cleanupHotkeyEnabled == true
+            currentHotkeyType = useCleanup ? .cleanup : .normal
+            let mode = useCleanup ? "cleanup" : "normal"
+            logger.info("Caps Lock pressed (\(mode) mode)", category: "Hotkey")
+            onHotkeyPressed?(currentHotkeyType)
+        } else if isRecording && startedWithCapsLock {
+            isRecording = false
+            startedWithCapsLock = false
+            let releasedType = currentHotkeyType
+            logger.info("Caps Lock released (\(releasedType == .cleanup ? "cleanup" : "normal") mode)", category: "Hotkey")
+            onHotkeyReleased?(releasedType)
+        }
+    }
+    
     private func setupKeyReleaseMonitoring() {
-        // Monitor for key release events globally
-        NSEvent.addGlobalMonitorForEvents(matching: [.keyUp, .flagsChanged]) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyUp, .flagsChanged]) { [weak self] event in
             self?.handleKeyRelease(event)
         }
         
-        // Monitor for key release events locally as well
-        NSEvent.addLocalMonitorForEvents(matching: [.keyUp, .flagsChanged]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp, .flagsChanged]) { [weak self] event in
             self?.handleKeyRelease(event)
             return event
         }
@@ -163,8 +283,8 @@ class HotkeyManager {
     
     private func handleKeyRelease(_ event: NSEvent) {
         guard isRecording else { return }
+        guard !startedWithCapsLock else { return }
         
-        // Get the key code and modifiers for the current hotkey type
         let currentKeyCode: UInt16
         let currentModifiers: NSEvent.ModifierFlags
         
@@ -180,8 +300,7 @@ class HotkeyManager {
         let isCurrentKeyPressed = event.keyCode == currentKeyCode
         let isCurrentModifierPressed = event.modifierFlags.contains(currentModifiers)
         
-        // Stop recording when either the key or modifier is released
-        if (event.type == .keyUp && isCurrentKeyPressed) || 
+        if (event.type == .keyUp && isCurrentKeyPressed) ||
            (event.type == .flagsChanged && !isCurrentModifierPressed) {
             isRecording = false
             let releasedType = currentHotkeyType
@@ -195,25 +314,45 @@ class HotkeyManager {
     private func cleanup() {
         if let hotKeyRef = primaryHotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
-            self.primaryHotKeyRef = nil
+            primaryHotKeyRef = nil
         }
         
         if let hotKeyRef = cleanupHotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
-            self.cleanupHotKeyRef = nil
+            cleanupHotKeyRef = nil
         }
         
         if let eventHandler = eventHandler {
             RemoveEventHandler(eventHandler)
             self.eventHandler = nil
         }
-    }
-    
-    func updateHotkey() {
-        logger.info("Updating hotkey configuration...", category: "Hotkey")
-        print("🔄 Updating hotkey configuration...")
-        cleanup()
-        setupCarbonHotkeys()
+        
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+            runLoopSource = nil
+        }
+        
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+            eventTap = nil
+        }
+        
+        CapsLockHIDRemap.restoreIfNeeded()
+        
+        if let globalMonitor = globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+            self.globalMonitor = nil
+        }
+        
+        if let localMonitor = localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+        
+        capsLockDown = false
+        startedWithCapsLock = false
+        isRecording = false
     }
     
     private func convertToCarbonModifiers(_ modifiers: NSEvent.ModifierFlags) -> UInt32 {

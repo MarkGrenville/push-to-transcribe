@@ -87,7 +87,7 @@ class PermissionManager {
         alert.messageText = "Accessibility Permission Required"
         alert.informativeText = """
         Push to Transcribe needs accessibility permission to:
-        • Monitor global hotkeys (Control + Space)
+        • Monitor global hotkeys (Caps Lock or your custom shortcut)
         • Automatically paste transcribed text (Cmd + V simulation)
         • Use Apple Events for text input
         
