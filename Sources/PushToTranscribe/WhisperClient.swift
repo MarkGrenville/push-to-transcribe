@@ -8,373 +8,536 @@ enum APIErrorKind {
     case networkError
     case serverError
     case other
-    
+
     var isBillingRelated: Bool {
         self == .quotaExceeded
     }
 }
 
-class WhisperClient {
+struct TranscriptionFailure {
+    let kind: APIErrorKind
+    let message: String
+    /// Whether retrying the identical request could plausibly succeed. A lost
+    /// connection is retryable; a rejected API key is not.
+    let isRetryable: Bool
+    /// The server rejected the audio container rather than the request. Worth
+    /// one attempt in the universally-accepted format before giving up.
+    let isFormatRejection: Bool
+
+    var isBillingRelated: Bool { kind.isBillingRelated }
+
+    init(kind: APIErrorKind, message: String, isRetryable: Bool, isFormatRejection: Bool = false) {
+        self.kind = kind
+        self.message = message
+        self.isRetryable = isRetryable
+        self.isFormatRejection = isFormatRejection
+    }
+}
+
+/// A recording waiting to be, or being, transcribed. Held onto after a failure
+/// so the audio is never the thing that gets lost.
+struct TranscriptionJob {
+    let sessionId: String
+    let audio: EncodedAudio
+    let mode: HotkeyType
+    /// The samples the upload was made from, kept so the recording can be
+    /// re-encoded rather than lost if the server refuses the container.
+    let clip: AudioClip
+    let createdAt: Date
+
+    var duration: TimeInterval { clip.duration }
+
+    func reencoded(as audio: EncodedAudio) -> TranscriptionJob {
+        TranscriptionJob(sessionId: sessionId, audio: audio, mode: mode, clip: clip, createdAt: createdAt)
+    }
+}
+
+/// What the client is currently doing, for the menu bar.
+enum TranscriptionProgress {
+    case uploading(fraction: Double)
+    case waitingForNetwork
+    case processing
+    case retrying(attempt: Int, of: Int)
+}
+
+final class WhisperClient: NSObject {
     private var apiKey: String
     private let apiURL = "https://api.openai.com/v1/audio/transcriptions"
-    private var accumulatedTranscript = ""
-    private var audioBuffer = Data()
     private weak var settingsManager: SettingsManager?
     private let logger = DiagnosticLogger.shared
-    private var requestStartTime: Date?
-    private(set) var currentSessionId: String?
-    
-    var onTranscriptionComplete: ((String) -> Void)?
-    var onAPIError: ((APIErrorKind, String) -> Void)?
-    
+
+    /// Total attempts per recording, including the first.
+    private let maxAttempts = 3
+    /// OpenAI rejects uploads above 25 MB.
+    private let maxUploadBytes = 25 * 1024 * 1024
+
+    private var session: URLSession!
+    private var progressHandlers: [Int: (Double) -> Void] = [:]
+    private let progressLock = NSLock()
+    private var lastWarmup = Date.distantPast
+
+    /// The last recording that failed and can still be retried by hand.
+    private(set) var pendingRetry: TranscriptionJob?
+
+    /// All callbacks land on the main queue.
+    var onTranscriptionComplete: ((String, TranscriptionJob?) -> Void)?
+    var onAPIError: ((TranscriptionFailure, TranscriptionJob?) -> Void)?
+    var onProgress: ((TranscriptionProgress) -> Void)?
+
     init(apiKey: String, settingsManager: SettingsManager) {
         self.apiKey = apiKey
         self.settingsManager = settingsManager
-        
-        if !apiKey.isEmpty {
-            let maskedKey = apiKey.prefix(10) + "..." + apiKey.suffix(4)
-            logger.info("WhisperClient initialized with API key: \(maskedKey)", category: "API")
+        super.init()
+
+        let config = URLSessionConfiguration.default
+        // Rather than failing instantly when the machine is offline or the link
+        // is flapping, hold the request until there is a usable route.
+        config.waitsForConnectivity = true
+        config.timeoutIntervalForRequest = 90
+        config.timeoutIntervalForResource = 180
+        config.networkServiceType = .responsiveData
+        session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+
+        if apiKey.isEmpty {
+            logger.warning("WhisperClient initialized without API key — set one in Settings", category: "API")
         } else {
-            logger.warning("WhisperClient initialized without API key - set one in Settings", category: "API")
+            logger.info("WhisperClient initialized with API key: \(Self.mask(apiKey))", category: "API")
         }
     }
-    
+
     func updateAPIKey(_ newKey: String) {
         apiKey = newKey
         if !newKey.isEmpty {
-            let maskedKey = newKey.prefix(10) + "..." + newKey.suffix(4)
-            logger.info("WhisperClient API key updated: \(maskedKey)", category: "API")
+            logger.info("WhisperClient API key updated: \(Self.mask(newKey))", category: "API")
         }
     }
-    
-    func accumulateAudio(audioData: Data) {
-        audioBuffer.append(audioData)
-        logger.debug("Accumulated \(audioBuffer.count) bytes of audio", category: "Audio")
+
+    private static func mask(_ key: String) -> String {
+        guard key.count > 14 else { return "(short key)" }
+        return key.prefix(10) + "..." + key.suffix(4)
     }
-    
-    func processAccumulatedAudio() {
+
+    // MARK: - Entry points
+
+    /// Encodes and uploads a finished recording.
+    func transcribe(_ clip: AudioClip, mode: HotkeyType) {
         guard !apiKey.isEmpty else {
-            logger.error("No API key configured - go to Settings > API Key to set one", category: "API")
-            onTranscriptionComplete?("")
+            logger.error("No API key configured — Settings > API Key", category: "API")
+            deliverFailure(TranscriptionFailure(kind: .authFailed, message: "No API key configured", isRetryable: false),
+                           job: nil)
             return
         }
-        
-        guard !audioBuffer.isEmpty else {
-            logger.warning("No audio data to process - buffer is empty", category: "Audio")
-            onTranscriptionComplete?("")
+
+        guard !clip.isEmpty else {
+            logger.warning("Nothing captured — no audio to transcribe", category: "Audio")
+            deliverEmpty()
             return
         }
-        
-        let durationSeconds = Double(audioBuffer.count) / (16000.0 * 2.0) // 16kHz, 16-bit (2 bytes)
-        logger.info("Processing \(audioBuffer.count) bytes (~\(String(format: "%.2f", durationSeconds))s) of audio", category: "Audio")
-        
-        // Clear any previous transcript
-        accumulatedTranscript = ""
-        
-        // Send all accumulated audio at once
-        let audioToProcess = audioBuffer
-        audioBuffer.removeAll()
-        
-        sendAudioToWhisper(audioData: audioToProcess)
+
+        // A clip always contains pre-roll and tail, so its own length says
+        // nothing about intent — only how long the key was held does. A tap is
+        // not a dictation, and uploading one gets a hallucinated word pasted
+        // into whatever the user was typing in.
+        guard clip.heldDuration >= 0.25 else {
+            logger.info("Discarding a \(Int(clip.heldDuration * 1000))ms tap — too short to be speech", category: "Audio")
+            deliverEmpty()
+            return
+        }
+
+        // Near-digital-silence means a muted or dead microphone. Deliberately
+        // set far below any real speech so a quiet talker is never dropped.
+        guard clip.peakAmplitude >= 0.003 else {
+            logger.warning("Discarding a silent \(String(format: "%.1f", clip.duration))s recording — is the microphone muted?", category: "Audio")
+            deliverEmpty()
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            guard let audio = AudioEncoder.encode(clip) else {
+                self.deliverFailure(TranscriptionFailure(kind: .other, message: "Could not encode the recording", isRetryable: false),
+                                    job: nil)
+                return
+            }
+
+            guard audio.data.count <= self.maxUploadBytes else {
+                let mb = audio.data.count / 1024 / 1024
+                self.deliverFailure(TranscriptionFailure(kind: .other, message: "Recording too large to upload (\(mb)MB)", isRetryable: false),
+                                    job: nil)
+                return
+            }
+
+            let job = TranscriptionJob(sessionId: SettingsManager.generateSessionId(),
+                                       audio: audio,
+                                       mode: mode,
+                                       clip: clip,
+                                       createdAt: Date())
+            self.settingsManager?.saveAudioToArchive(audio.data,
+                                                     fileExtension: audio.fileExtension,
+                                                     sessionId: job.sessionId)
+            self.send(job, attempt: 1)
+        }
     }
-    
-    private func sendAudioToWhisper(audioData: Data) {
-        // Create a temporary WAV file
-        guard let wavData = createWAVFile(from: audioData) else {
-            logger.error("Failed to create WAV file from audio data", category: "API")
-            onTranscriptionComplete?("")
+
+    /// Re-uploads the last failed recording. The audio is still in memory, so
+    /// this costs nothing but the request.
+    func retryPending() {
+        guard let job = pendingRetry else {
+            logger.warning("Retry requested but nothing is pending", category: "API")
             return
         }
-        
-        logger.info("Created WAV file: \(wavData.count) bytes", category: "API")
-        
-        // Archive the audio file
-        let sessionId = SettingsManager.generateSessionId()
-        currentSessionId = sessionId
-        settingsManager?.saveAudioToArchive(wavData: wavData, sessionId: sessionId)
-        
-        // Create multipart form data
-        let boundary = UUID().uuidString
-        
+        pendingRetry = nil
+        logger.info("Manual retry of \(job.sessionId) (\(String(format: "%.1f", job.duration))s)", category: "API")
+        send(job, attempt: 1)
+    }
+
+    func clearPendingRetry() {
+        pendingRetry = nil
+    }
+
+    /// Establishes the TLS connection to the API while the user is still
+    /// talking, so the upload does not begin with a handshake. On a slow link
+    /// that handshake alone is several hundred milliseconds. Fire and forget —
+    /// the result is irrelevant, only the pooled connection matters.
+    func warmUpConnection() {
+        guard !apiKey.isEmpty else { return }
+        guard Date().timeIntervalSince(lastWarmup) > 60 else { return }
+        lastWarmup = Date()
+
+        guard let url = URL(string: "https://api.openai.com/v1/models") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 10
+        session.dataTask(with: request) { _, _, _ in }.resume()
+    }
+
+    // MARK: - Request
+
+    private func send(_ job: TranscriptionJob, attempt: Int) {
         guard let url = URL(string: apiURL) else {
-            logger.error("Invalid API URL: \(apiURL)", category: "API")
-            onTranscriptionComplete?("")
+            deliverFailure(TranscriptionFailure(kind: .other, message: "Invalid API URL", isRetryable: false), job: job)
             return
         }
-        
+
+        let boundary = UUID().uuidString
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 60 // 60 second timeout
-        
+
         let model = settingsManager?.transcriptionModel ?? "gpt-transcribe"
-        let language = settingsManager?.language ?? "en"
-        
-        logger.info("Sending API request to OpenAI", category: "API")
-        logger.info("Model: \(model), Language: \(language)", category: "API")
-        
-        let body = createMultipartBody(audioData: wavData, boundary: boundary)
-        request.httpBody = body
-        
-        logger.info("Request body size: \(body.count) bytes", category: "API")
-        
-        // Record start time
-        requestStartTime = Date()
-        
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else {
-                self?.logger.error("WhisperClient deallocated during request", category: "API")
-                return
-            }
-            
-            // Calculate request duration
-            let duration: String
-            if let startTime = self.requestStartTime {
-                let elapsed = Date().timeIntervalSince(startTime)
-                duration = String(format: "%.2f", elapsed)
-            } else {
-                duration = "unknown"
-            }
-            
+        let body = multipartBody(job: job, boundary: boundary, model: model)
+
+        logger.info("Uploading \(body.count / 1024)KB (\(String(format: "%.1f", job.duration))s audio, model \(model), attempt \(attempt)/\(maxAttempts))", category: "API")
+
+        if attempt > 1 {
+            report(.retrying(attempt: attempt, of: maxAttempts))
+        } else {
+            report(.uploading(fraction: 0))
+        }
+
+        let started = Date()
+        let task = session.uploadTask(with: request, from: body) { [weak self] data, response, error in
+            guard let self = self else { return }
+            let elapsed = String(format: "%.2f", Date().timeIntervalSince(started))
+
             if let error = error {
-                self.logger.error("Network error after \(duration)s: \(error.localizedDescription)", category: "API")
-                
-                let nsError = error as NSError
-                var errorMessage = error.localizedDescription
-                if nsError.domain == NSURLErrorDomain {
-                    switch nsError.code {
-                    case NSURLErrorTimedOut:
-                        errorMessage = "Request timed out"
-                    case NSURLErrorNotConnectedToInternet:
-                        errorMessage = "No internet connection"
-                    case NSURLErrorNetworkConnectionLost:
-                        errorMessage = "Network connection was lost"
-                    case NSURLErrorSecureConnectionFailed:
-                        errorMessage = "SSL/TLS connection failed"
-                    default:
-                        break
-                    }
-                    self.logger.error(errorMessage, category: "API")
-                }
-                
-                DispatchQueue.main.async {
-                    self.onAPIError?(.networkError, errorMessage)
-                    self.onTranscriptionComplete?("")
-                }
+                let failure = Self.classify(networkError: error)
+                self.logger.error("Network error after \(elapsed)s: \(failure.message)", category: "API")
+                self.handle(failure, job: job, attempt: attempt)
                 return
             }
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                self.logger.error("Invalid response type (not HTTP) after \(duration)s", category: "API")
-                DispatchQueue.main.async {
-                    self.onTranscriptionComplete?("")
-                }
+
+            guard let http = response as? HTTPURLResponse, let data = data else {
+                self.handle(TranscriptionFailure(kind: .networkError, message: "No response from the server", isRetryable: true),
+                            job: job, attempt: attempt)
                 return
             }
-            
-            self.logger.info("Response received in \(duration)s - Status: \(httpResponse.statusCode)", category: "API")
-            
-            // Log response headers for debugging
-            if httpResponse.statusCode != 200 {
-                self.logger.warning("Response headers: \(httpResponse.allHeaderFields)", category: "API")
-            }
-            
-            guard let data = data else {
-                self.logger.error("No data in response body", category: "API")
-                DispatchQueue.main.async {
-                    self.onTranscriptionComplete?("")
-                }
+
+            self.logger.info("HTTP \(http.statusCode) in \(elapsed)s (\(data.count) bytes)", category: "API")
+
+            guard http.statusCode == 200 else {
+                let failure = Self.classify(status: http.statusCode, body: data)
+                self.logger.error("API error \(http.statusCode): \(failure.message)", category: "API")
+                self.handle(failure, job: job, attempt: attempt)
                 return
             }
-            
-            self.logger.info("Response body size: \(data.count) bytes", category: "API")
-            
-            // Handle non-200 status codes with error classification
-            if httpResponse.statusCode != 200 {
-                var errorMessage = "API error (HTTP \(httpResponse.statusCode))"
-                var errorKind: APIErrorKind = .other
-                
-                if let responseString = String(data: data, encoding: .utf8) {
-                    self.logger.error("Error response body: \(responseString)", category: "API")
-                    
-                    if let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let errorObj = jsonData["error"] as? [String: Any] {
-                        let message = errorObj["message"] as? String ?? ""
-                        let code = errorObj["code"] as? String ?? ""
-                        let type = errorObj["type"] as? String ?? ""
-                        errorMessage = message
-                        
-                        if code == "insufficient_quota" || type == "insufficient_quota"
-                            || message.lowercased().contains("quota") || message.lowercased().contains("exceeded your current billing")
-                            || message.lowercased().contains("billing") {
-                            errorKind = .quotaExceeded
-                        } else if httpResponse.statusCode == 429 {
-                            errorKind = .rateLimited
-                        } else if httpResponse.statusCode == 401 {
-                            errorKind = .authFailed
-                        } else if httpResponse.statusCode >= 500 {
-                            errorKind = .serverError
-                        }
-                    }
-                }
-                
-                DispatchQueue.main.async {
-                    self.onAPIError?(errorKind, errorMessage)
-                    self.onTranscriptionComplete?("")
-                }
-                return
-            }
-            
-            // Handle the response on a background thread to avoid main thread blocking
-            DispatchQueue.global(qos: .userInitiated).async {
-                self.handleTranscriptionResponse(data: data)
-            }
-        }.resume()
-        
-        logger.info("Request sent, waiting for response...", category: "API")
+
+            self.parse(data, job: job, attempt: attempt)
+        }
+
+        setProgressHandler(for: task.taskIdentifier) { [weak self] fraction in
+            self?.report(.uploading(fraction: fraction))
+        }
+        task.resume()
     }
-    
-    private func createWAVFile(from audioData: Data) -> Data? {
-        let sampleRate: UInt32 = 16000
-        let channels: UInt16 = 1
-        let bitsPerSample: UInt16 = 16
-        
-        let dataSize = UInt32(audioData.count)
-        let fileSize = dataSize + 36
-        
-        var wavData = Data()
-        
-        // RIFF header
-        wavData.append("RIFF".data(using: .ascii)!)
-        wavData.append(withUnsafeBytes(of: fileSize.littleEndian) { Data($0) })
-        wavData.append("WAVE".data(using: .ascii)!)
-        
-        // fmt chunk
-        wavData.append("fmt ".data(using: .ascii)!)
-        wavData.append(withUnsafeBytes(of: UInt32(16).littleEndian) { Data($0) })
-        wavData.append(withUnsafeBytes(of: UInt16(1).littleEndian) { Data($0) })
-        wavData.append(withUnsafeBytes(of: channels.littleEndian) { Data($0) })
-        wavData.append(withUnsafeBytes(of: sampleRate.littleEndian) { Data($0) })
-        wavData.append(withUnsafeBytes(of: (sampleRate * UInt32(channels) * UInt32(bitsPerSample) / 8).littleEndian) { Data($0) })
-        wavData.append(withUnsafeBytes(of: (channels * bitsPerSample / 8).littleEndian) { Data($0) })
-        wavData.append(withUnsafeBytes(of: bitsPerSample.littleEndian) { Data($0) })
-        
-        // data chunk
-        wavData.append("data".data(using: .ascii)!)
-        wavData.append(withUnsafeBytes(of: dataSize.littleEndian) { Data($0) })
-        wavData.append(audioData)
-        
-        return wavData
+
+    private func parse(_ data: Data, job: TranscriptionJob, attempt: Int) {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            handle(TranscriptionFailure(kind: .other, message: "Could not read the server's response", isRetryable: true),
+                   job: job, attempt: attempt)
+            return
+        }
+
+        if let error = json["error"] as? [String: Any] {
+            handle(Self.classify(errorObject: error, status: 200), job: job, attempt: attempt)
+            return
+        }
+
+        guard let text = json["text"] as? String else {
+            logger.error("Response had no 'text' field. Keys: \(json.keys.joined(separator: ", "))", category: "API")
+            handle(TranscriptionFailure(kind: .other, message: "Server returned no transcript", isRetryable: true),
+                   job: job, attempt: attempt)
+            return
+        }
+
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Pinning `language` is a hint, not a constraint: on near-silence these
+        // models still occasionally answer in another script entirely. Four of
+        // 3,617 archived transcriptions came back as Korean, Chinese or Urdu,
+        // every one a two-to-seven character hallucination. When the user has
+        // declared a Latin-script language, that output is never what they said
+        // — and auto-paste would put it straight into their document.
+        if isConfiguredForLatinScript, !clean.isEmpty, !Self.isLatinScript(clean) {
+            logger.warning("Discarding non-Latin transcript \(clean.debugDescription) — language is set to \(settingsManager?.language ?? "en")", category: "API")
+            DispatchQueue.main.async { [weak self] in
+                self?.onTranscriptionComplete?("", nil)
+            }
+            return
+        }
+
+        logger.success("Transcribed \(clean.count) characters", category: "API")
+        logger.info("Text: \(clean)", category: "Transcription")
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Only this job's own success clears it. A different recording
+            // succeeding says nothing about whether the parked one is still
+            // worth retrying — and throwing it away would lose the audio.
+            if self.pendingRetry?.sessionId == job.sessionId {
+                self.pendingRetry = nil
+            }
+            self.onTranscriptionComplete?(clean, job)
+        }
     }
-    
-    private func createMultipartBody(audioData: Data, boundary: String) -> Data {
+
+    /// Retries transient failures automatically before bothering the user, then
+    /// parks the audio so it can still be retried by hand.
+    private func handle(_ failure: TranscriptionFailure, job: TranscriptionJob, attempt: Int) {
+        if failure.isFormatRejection, job.audio.fileExtension != "wav" {
+            logger.warning("Server rejected \(job.audio.fileExtension) — re-sending as WAV", category: "API")
+            send(job.reencoded(as: AudioEncoder.wav(job.clip)), attempt: 1)
+            return
+        }
+
+        if failure.isRetryable && attempt < maxAttempts {
+            let delay = pow(2.0, Double(attempt - 1))   // 1s, then 2s
+            logger.warning("Retrying in \(Int(delay))s after: \(failure.message)", category: "API")
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.send(job, attempt: attempt + 1)
+            }
+            return
+        }
+
+        logger.error("Giving up after \(attempt) attempt(s): \(failure.message)", category: "API")
+        deliverFailure(failure, job: job)
+    }
+
+    private func deliverFailure(_ failure: TranscriptionFailure, job: TranscriptionJob?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Park audio a retry could actually fix. A non-retryable failure
+            // leaves any older parked recording alone rather than discarding a
+            // recording that is still recoverable.
+            if failure.isRetryable, let job = job {
+                self.pendingRetry = job
+            }
+            self.onAPIError?(failure, job)
+        }
+    }
+
+    private func deliverEmpty() {
+        DispatchQueue.main.async { [weak self] in
+            self?.onTranscriptionComplete?("", nil)
+        }
+    }
+
+    private func report(_ progress: TranscriptionProgress) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onProgress?(progress)
+        }
+    }
+
+    /// Only meaningful for languages actually written in Latin script — the
+    /// check would reject every correct result for, say, Japanese.
+    private var isConfiguredForLatinScript: Bool {
+        let language = settingsManager?.language ?? "en"
+        return !["auto", "zh", "ja", "ko", "ru", "ar", "he", "hi", "th", "el", "uk", "fa", "ur", "bn", "ta"].contains(language)
+    }
+
+    /// True when at least half the letters are Latin. Punctuation- or
+    /// digit-only output is left alone.
+    static func isLatinScript(_ text: String) -> Bool {
+        let letters = text.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+        guard !letters.isEmpty else { return true }
+        // 0x0041-0x024F spans Basic Latin, Latin-1 Supplement and Latin
+        // Extended-A/B, so accented English and European spellings all pass.
+        let latin = letters.filter { $0.value < 0x0250 }
+        return Double(latin.count) / Double(letters.count) >= 0.5
+    }
+
+    // MARK: - Error classification
+
+    private static func classify(networkError: Error) -> TranscriptionFailure {
+        let nsError = networkError as NSError
+        guard nsError.domain == NSURLErrorDomain else {
+            return TranscriptionFailure(kind: .networkError, message: networkError.localizedDescription, isRetryable: true)
+        }
+
+        switch nsError.code {
+        case NSURLErrorTimedOut:
+            return TranscriptionFailure(kind: .networkError, message: "Request timed out", isRetryable: true)
+        case NSURLErrorNotConnectedToInternet:
+            return TranscriptionFailure(kind: .networkError, message: "No internet connection", isRetryable: true)
+        case NSURLErrorNetworkConnectionLost:
+            return TranscriptionFailure(kind: .networkError, message: "Connection was lost", isRetryable: true)
+        case NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost, NSURLErrorDNSLookupFailed:
+            return TranscriptionFailure(kind: .networkError, message: "Could not reach OpenAI", isRetryable: true)
+        case NSURLErrorSecureConnectionFailed:
+            return TranscriptionFailure(kind: .networkError, message: "Secure connection failed", isRetryable: true)
+        case NSURLErrorCancelled:
+            return TranscriptionFailure(kind: .networkError, message: "Request cancelled", isRetryable: false)
+        default:
+            return TranscriptionFailure(kind: .networkError, message: networkError.localizedDescription, isRetryable: true)
+        }
+    }
+
+    private static func classify(status: Int, body: Data) -> TranscriptionFailure {
+        if let raw = String(data: body, encoding: .utf8), !raw.isEmpty {
+            DiagnosticLogger.shared.debug("Error body: \(raw.prefix(500))", category: "API")
+        }
+
+        if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+           let error = json["error"] as? [String: Any] {
+            return classify(errorObject: error, status: status)
+        }
+
+        return TranscriptionFailure(kind: kind(for: status),
+                                    message: "API error (HTTP \(status))",
+                                    isRetryable: isRetryable(status))
+    }
+
+    private static func classify(errorObject: [String: Any], status: Int) -> TranscriptionFailure {
+        let message = errorObject["message"] as? String ?? "Unknown error"
+        let code = errorObject["code"] as? String ?? ""
+        let type = errorObject["type"] as? String ?? ""
+        let lowered = message.lowercased()
+
+        if code == "insufficient_quota" || type == "insufficient_quota"
+            || lowered.contains("quota") || lowered.contains("billing") {
+            return TranscriptionFailure(kind: .quotaExceeded, message: message, isRetryable: false)
+        }
+
+        let looksLikeFormat = status == 400 && ["format", "file type", "unsupported", "could not be decoded", "invalid file"]
+            .contains { lowered.contains($0) }
+
+        return TranscriptionFailure(kind: kind(for: status),
+                                    message: message,
+                                    isRetryable: isRetryable(status),
+                                    isFormatRejection: looksLikeFormat)
+    }
+
+    private static func kind(for status: Int) -> APIErrorKind {
+        switch status {
+        case 401, 403: return .authFailed
+        case 429: return .rateLimited
+        case 500...599: return .serverError
+        default: return .other
+        }
+    }
+
+    /// Rate limits and server faults clear on their own; a rejected key or a
+    /// malformed request will fail identically forever.
+    private static func isRetryable(_ status: Int) -> Bool {
+        status == 408 || status == 409 || status == 429 || (500...599).contains(status)
+    }
+
+    // MARK: - Multipart
+
+    private func multipartBody(job: TranscriptionJob, boundary: String, model: String) -> Data {
         var body = Data()
-        
-        let model = settingsManager?.transcriptionModel ?? "gpt-transcribe"
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(model)\r\n".data(using: .utf8)!)
-        
-        // gpt-transcribe uses "languages" (array); older models use "language" (singular)
+
+        func field(_ name: String, _ value: String) {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8))
+            body.append(Data("\(value)\r\n".utf8))
+        }
+
+        field("model", model)
+
         let language = settingsManager?.language ?? "en"
         if language != "auto" {
-            if model == "gpt-transcribe" {
-                body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                body.append("Content-Disposition: form-data; name=\"languages[]\"\r\n\r\n".data(using: .utf8)!)
-                body.append("\(language)\r\n".data(using: .utf8)!)
-            } else {
-                body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-                body.append("\(language)\r\n".data(using: .utf8)!)
-            }
+            // gpt-transcribe takes a "languages" array; the older models take a
+            // single "language".
+            field(model == "gpt-transcribe" ? "languages[]" : "language", language)
         }
-        
-        // Add response_format parameter
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n".data(using: .utf8)!)
-        body.append("json\r\n".data(using: .utf8)!)
-        
-        // Add audio file
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(audioData)
-        body.append("\r\n".data(using: .utf8)!)
-        
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        
+
+        field("response_format", "json")
+
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"audio.\(job.audio.fileExtension)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(job.audio.mimeType)\r\n\r\n".utf8))
+        body.append(job.audio.data)
+        body.append(Data("\r\n".utf8))
+        body.append(Data("--\(boundary)--\r\n".utf8))
+
         return body
     }
-    
-    private func handleTranscriptionResponse(data: Data) {
-        logger.debug("Parsing response JSON...", category: "API")
-        
-        // First, try to log the raw response for debugging
-        if let rawString = String(data: data, encoding: .utf8) {
-            let preview = rawString.count > 200 ? String(rawString.prefix(200)) + "..." : rawString
-            logger.debug("Raw response: \(preview)", category: "API")
-        }
-        
-        do {
-            if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                // Check for error response
-                if let error = json["error"] as? [String: Any] {
-                    let message = error["message"] as? String ?? "Unknown error"
-                    let type = error["type"] as? String ?? "unknown"
-                    let code = error["code"] as? String ?? "none"
-                    logger.error("API Error - Type: \(type), Code: \(code), Message: \(message)", category: "API")
-                    
-                    var errorKind: APIErrorKind = .other
-                    if code == "insufficient_quota" || type == "insufficient_quota"
-                        || message.lowercased().contains("quota") || message.lowercased().contains("billing") {
-                        errorKind = .quotaExceeded
-                    }
-                    
-                    DispatchQueue.main.async {
-                        self.onAPIError?(errorKind, message)
-                        self.onTranscriptionComplete?("")
-                    }
-                    return
-                }
-                
-                // Extract transcription text
-                if let text = json["text"] as? String {
-                    let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    logger.success("Transcription received: \(cleanText.count) characters", category: "API")
-                    logger.info("Text: \(cleanText)", category: "Transcription")
-                    
-                    // Update using the existing callback mechanism on main thread
-                    DispatchQueue.main.async {
-                        self.onTranscriptionComplete?(cleanText)
-                    }
-                } else {
-                    logger.error("Response JSON missing 'text' field. Keys: \(json.keys.joined(separator: ", "))", category: "API")
-                    DispatchQueue.main.async {
-                        self.onTranscriptionComplete?("")
-                    }
-                }
-            } else {
-                logger.error("Failed to parse response as JSON dictionary", category: "API")
-                DispatchQueue.main.async {
-                    self.onTranscriptionComplete?("")
-                }
-            }
-        } catch {
-            logger.error("JSON parsing error: \(error.localizedDescription)", category: "API")
-            // Handle error on main thread
-            DispatchQueue.main.async {
-                self.onTranscriptionComplete?("")
-            }
+
+    // MARK: - Progress bookkeeping
+
+    private func setProgressHandler(for taskId: Int, _ handler: @escaping (Double) -> Void) {
+        progressLock.lock()
+        progressHandlers[taskId] = handler
+        progressLock.unlock()
+    }
+
+    private func progressHandler(for taskId: Int) -> ((Double) -> Void)? {
+        progressLock.lock()
+        defer { progressLock.unlock() }
+        return progressHandlers[taskId]
+    }
+
+    private func removeProgressHandler(for taskId: Int) {
+        progressLock.lock()
+        progressHandlers.removeValue(forKey: taskId)
+        progressLock.unlock()
+    }
+}
+
+extension WhisperClient: URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64,
+                    totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        let fraction = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
+        progressHandler(for: task.taskIdentifier)?(fraction)
+        if fraction >= 1.0 {
+            // Upload done; the model is thinking now.
+            report(.processing)
         }
     }
-    
-    func getFinalTranscript() -> String {
-        return accumulatedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
+        logger.warning("Waiting for a usable network connection...", category: "API")
+        report(.waitingForNetwork)
     }
-    
-    func clearTranscript() {
-        accumulatedTranscript = ""
-        audioBuffer.removeAll()
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        removeProgressHandler(for: task.taskIdentifier)
     }
-} 
+}

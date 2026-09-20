@@ -29,6 +29,56 @@ enum CapsLockHIDRemap {
         print("❌ Failed to remap Caps Lock to F18")
     }
     
+    /// Re-push the mapping onto every attached keyboard without the caps-lock
+    /// reset or the logging `apply()` does. The HID mapping is per-service and
+    /// per-boot: it is dropped when a keyboard is reconnected and can be lost
+    /// across sleep/wake, at which point Caps Lock silently goes back to being
+    /// Caps Lock and no F18 ever reaches the event tap.
+    @discardableResult
+    static func reapply() -> Bool {
+        let map = mapping(from: capsLockUsage, to: f18Usage)
+        if setUserKeyMapping(map, verbose: false) {
+            applied = true
+            return true
+        }
+        return false
+    }
+    
+    /// True when at least one attached keyboard currently reports our
+    /// Caps Lock -> F18 mapping.
+    static func isMappingActive() -> Bool {
+        forEachKeyboardService { service in
+            guard let raw = IOHIDServiceClientCopyProperty(service, "UserKeyMapping" as CFString) else {
+                return false
+            }
+            guard let entries = raw as? [[String: NSNumber]] else { return false }
+            return entries.contains { entry in
+                entry["HIDKeyboardModifierMappingSrc"]?.uint64Value == capsLockUsage &&
+                entry["HIDKeyboardModifierMappingDst"]?.uint64Value == f18Usage
+            }
+        }
+    }
+    
+    /// Runs `body` over every keyboard HID service, returning true as soon as
+    /// one of them answers true.
+    private static func forEachKeyboardService(_ body: (IOHIDServiceClient) -> Bool) -> Bool {
+        let system = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
+        guard let services = IOHIDEventSystemClientCopyServices(system) else { return false }
+        
+        for i in 0..<CFArrayGetCount(services) {
+            let raw = CFArrayGetValueAtIndex(services, i)!
+            let service = Unmanaged<IOHIDServiceClient>.fromOpaque(raw).takeUnretainedValue()
+            let isKeyboard = IOHIDServiceClientConformsTo(
+                service,
+                UInt32(kHIDPage_GenericDesktop),
+                UInt32(kHIDUsage_GD_Keyboard)
+            ) != 0
+            guard isKeyboard else { continue }
+            if body(service) { return true }
+        }
+        return false
+    }
+    
     static func restoreIfNeeded() {
         guard applied else { return }
         if setUserKeyMapping([]) || runHidutil(mapJSON: "{\"UserKeyMapping\":[]}") {
@@ -46,10 +96,10 @@ enum CapsLockHIDRemap {
         ]]
     }
     
-    private static func setUserKeyMapping(_ map: [[String: NSNumber]]) -> Bool {
+    private static func setUserKeyMapping(_ map: [[String: NSNumber]], verbose: Bool = true) -> Bool {
         let system = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
         guard let services = IOHIDEventSystemClientCopyServices(system) else {
-            print("❌ IOHIDEventSystemClientCopyServices failed")
+            if verbose { print("❌ IOHIDEventSystemClientCopyServices failed") }
             return false
         }
         
@@ -68,7 +118,7 @@ enum CapsLockHIDRemap {
                 updated += 1
             }
         }
-        print("HID UserKeyMapping applied to \(updated) keyboard service(s)")
+        if verbose { print("HID UserKeyMapping applied to \(updated) keyboard service(s)") }
         return updated > 0
     }
     

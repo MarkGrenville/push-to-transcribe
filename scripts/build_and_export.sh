@@ -39,6 +39,8 @@ cp "MacWhisper.app/Contents/Info.plist" "$APP_BUNDLE/Contents/"
 cp "Sources/PushToTranscribe/Resources/MacWhisper.entitlements" \
    "$APP_BUNDLE/Contents/Resources/PushToTranscribe.entitlements"
 
+cp "Assets/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+
 echo "✅ App bundle created"
 
 # Step 3: Ad-hoc code sign (allows running on other Macs without Gatekeeper issues for local use)

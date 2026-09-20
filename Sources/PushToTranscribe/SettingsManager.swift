@@ -114,9 +114,17 @@ Output only the cleaned version.
         }
     }
     
-    @Published var cleanupModel: String = "gpt-4o-mini" {
+    @Published var cleanupModel: String = "gpt-5.6-luna" {
         didSet { saveSettings() }
     }
+
+    // Older builds stored GPT-4 era model IDs that are no longer offered in the
+    // picker. Map them onto the equivalent tier so the selection stays valid.
+    private static let legacyCleanupModels = [
+        "gpt-4o-mini": "gpt-5.6-luna",
+        "gpt-4o": "gpt-5.6-sol",
+        "gpt-4-turbo": "gpt-5.6-sol"
+    ]
     
     // File-based storage for cleanup prompt (survives app reinstalls)
     static var appSupportDirectory: URL? {
@@ -160,16 +168,15 @@ Output only the cleaned version.
         return formatter.string(from: Date())
     }
     
-    func saveAudioToArchive(wavData: Data, sessionId: String) {
+    func saveAudioToArchive(_ data: Data, fileExtension: String, sessionId: String) {
         guard let dir = SettingsManager.archiveAudioDirectory else {
             print("Failed to get archive audio directory")
             return
         }
-        let fileURL = dir.appendingPathComponent("\(sessionId).wav")
+        let fileURL = dir.appendingPathComponent("\(sessionId).\(fileExtension)")
         do {
-            try wavData.write(to: fileURL)
-            let logger = DiagnosticLogger.shared
-            logger.info("Archived audio: \(fileURL.lastPathComponent) (\(wavData.count) bytes)", category: "Archive")
+            try data.write(to: fileURL)
+            DiagnosticLogger.shared.info("Archived audio: \(fileURL.lastPathComponent) (\(data.count / 1024)KB)", category: "Archive")
         } catch {
             print("Failed to archive audio: \(error)")
         }
@@ -415,7 +422,7 @@ Output only the cleaned version.
         }
         
         if let model = settings["cleanupModel"] as? String {
-            cleanupModel = model
+            cleanupModel = SettingsManager.legacyCleanupModels[model] ?? model
         }
     }
     

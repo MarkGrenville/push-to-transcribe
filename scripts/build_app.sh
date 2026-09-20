@@ -30,6 +30,8 @@ cp "MacWhisper.app/Contents/Info.plist" "$APP_BUNDLE/Contents/"
 cp "Sources/PushToTranscribe/Resources/MacWhisper.entitlements" \
    "$APP_BUNDLE/Contents/Resources/PushToTranscribe.entitlements"
 
+cp "Assets/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+
 echo "✅ Build complete: $APP_BUNDLE"
 
 echo "📲 Installing to /Applications..."

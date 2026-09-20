@@ -136,6 +136,20 @@ The app includes a comprehensive settings window with three tabs:
 - **ClipboardUtils**: Manages clipboard operations and keystroke simulation
 - **PermissionManager**: Handles microphone and accessibility permissions
 
+## App Icon
+
+The icon is generated from code rather than checked in as a hand-drawn asset:
+
+```bash
+python3 scripts/generate_icon.py          # requires Pillow
+iconutil -c icns Assets/AppIcon.iconset -o Assets/AppIcon.icns
+```
+
+This writes `Assets/AppIcon.iconset` (all macOS sizes), `Assets/icon-1024.png`, and
+web favicons in `Assets/favicon/` (`favicon.ico`, 16/32/192/512 PNGs, and an
+apple-touch-icon). `scripts/build_app.sh` copies `Assets/AppIcon.icns` into the app
+bundle, so re-run the two commands above after changing the design.
+
 ## Configuration
 
 ### API Settings

@@ -1,0 +1,17 @@
+{
+  "components": [
+    {
+      "componentId": "cmp_24f2bf7bf4",
+      "name": "Push to Transcribe",
+      "kind": "web"
+    }
+  ],
+  "releases": [],
+  "policy": {
+    "requireStaging": true,
+    "requireChecks": true,
+    "requireAcceptance": false,
+    "autoStageOnVersion": false,
+    "dataNote": ""
+  }
+}

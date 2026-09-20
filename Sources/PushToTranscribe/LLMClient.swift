@@ -4,6 +4,16 @@ class LLMClient {
     private var apiKey: String
     private let apiURL = "https://api.openai.com/v1/chat/completions"
     private let logger = DiagnosticLogger.shared
+
+    /// Same treatment as the transcription client: hold the request until there
+    /// is a route rather than failing the moment the link drops.
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.waitsForConnectivity = true
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
     
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -37,17 +47,24 @@ class LLMClient {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
-        
-        let requestBody: [String: Any] = [
+        var requestBody: [String: Any] = [
             "model": model,
             "messages": [
                 ["role": "system", "content": prompt],
                 ["role": "user", "content": text]
-            ],
-            "temperature": 0.3, // Lower temperature for more consistent cleanup
-            "max_tokens": 4096
+            ]
         ]
+
+        if model.hasPrefix("gpt-5") {
+            // GPT-5.x reasoning models reject temperature and max_tokens, and
+            // default to medium reasoning effort. Cleanup is a rewrite task, so
+            // "none" keeps latency close to a plain completion.
+            requestBody["max_completion_tokens"] = 4096
+            requestBody["reasoning_effort"] = "none"
+        } else {
+            requestBody["temperature"] = 0.3 // Lower temperature for more consistent cleanup
+            requestBody["max_tokens"] = 4096
+        }
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -60,7 +77,7 @@ class LLMClient {
         let requestStartTime = Date()
         logger.info("Sending cleanup request to OpenAI...", category: "LLM")
         
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        session.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else {
                 completion(text)
                 return

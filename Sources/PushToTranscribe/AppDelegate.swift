@@ -14,9 +14,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTranscription: String = ""
     private var settingsManager: SettingsManager!
     private var settingsWindow: NSWindow?
-    private var currentRecordingMode: HotkeyType = .normal
     private var errorMenuItem: NSMenuItem!
     private var billingMenuItem: NSMenuItem!
+    private var retryMenuItem: NSMenuItem!
     private var errorSeparator: NSMenuItem!
     private var isInErrorState = false
     private static let billingURL = "https://platform.openai.com/settings/organization/billing/overview"
@@ -64,6 +64,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         errorMenuItem.isHidden = true
         menu.addItem(errorMenuItem)
         
+        retryMenuItem = NSMenuItem(title: "Retry Transcription", action: #selector(retryTranscription), keyEquivalent: "r")
+        retryMenuItem.isHidden = true
+        menu.addItem(retryMenuItem)
+
         billingMenuItem = NSMenuItem(title: "Top Up OpenAI Credits...", action: #selector(openBilling), keyEquivalent: "")
         billingMenuItem.isHidden = true
         menu.addItem(billingMenuItem)
@@ -88,23 +92,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private enum AppStatus {
         case ready
         case recording
+        case uploading(Double)
+        case waitingForNetwork
         case transcribing
+        case retrying(Int, Int)
         case cleaningUp
         case apiError(String)
-    }
-    
-    private func updateMenuBarIcon(isRecording: Bool) {
-        updateStatus(isRecording ? .recording : .ready)
-    }
-    
-    private func updateMenuBarIcon(isRecording: Bool, isTranscribing: Bool) {
-        if isRecording {
-            updateStatus(.recording)
-        } else if isTranscribing {
-            updateStatus(.transcribing)
-        } else {
-            updateStatus(.ready)
-        }
     }
     
     private func updateStatus(_ status: AppStatus) {
@@ -121,6 +114,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 symbolName = "mic.fill"
                 tooltip = "Push to Transcribe - Recording... (Release to stop)"
                 statusText = "Recording..."
+            case .uploading(let fraction):
+                symbolName = "waveform"
+                let percent = Int(fraction * 100)
+                // On a slow uplink this is where the wait actually is, so show
+                // it rather than a spinner that looks identical to a hang.
+                statusText = percent >= 99 ? "Transcribing..." : "Uploading... \(percent)%"
+                tooltip = "Push to Transcribe - \(statusText)"
+            case .waitingForNetwork:
+                symbolName = "wifi.exclamationmark"
+                statusText = "Waiting for network..."
+                tooltip = "Push to Transcribe - waiting for a connection, your audio is safe"
+            case .retrying(let attempt, let total):
+                symbolName = "arrow.clockwise"
+                statusText = "Retrying (\(attempt)/\(total))..."
+                tooltip = "Push to Transcribe - \(statusText)"
             case .transcribing:
                 symbolName = "waveform"
                 tooltip = "Push to Transcribe - Transcribing audio..."
@@ -201,31 +209,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.stopRecording(mode: hotkeyType)
         }
         
-        // Setup audio recording callback
-        audioManager.onAudioDataReceived = { [weak self] audioData in
-            // Just accumulate audio while recording, don't process it yet
-            self?.whisperClient.accumulateAudio(audioData: audioData)
+        audioManager.onRecordingFinished = { [weak self] clip, mode in
+            self?.whisperClient.transcribe(clip, mode: mode)
         }
         
-        // Setup callback for when recording fully stops (all buffers captured)
-        audioManager.onRecordingStopped = { [weak self] in
-            let logger = DiagnosticLogger.shared
-            logger.info("Audio capture complete - sending to API", category: "Recording")
-            // Only process audio after all buffers have been captured
-            self?.whisperClient.processAccumulatedAudio()
+        audioManager.onRecordingTruncated = { [weak self] in
+            self?.showSimpleNotification(title: "Recording Stopped",
+                                         body: "Hit the 5 minute limit. Transcribing what was captured.")
         }
         
-        // Setup transcription completion callback
-        whisperClient.onTranscriptionComplete = { [weak self] finalTranscript in
-            let logger = DiagnosticLogger.shared
-            logger.debug("onTranscriptionComplete callback fired", category: "Recording")
-            self?.handleTranscriptionComplete(finalTranscript)
+        whisperClient.onTranscriptionComplete = { [weak self] transcript, job in
+            self?.handleTranscriptionComplete(transcript, job: job)
         }
         
-        // Setup API error callback
-        whisperClient.onAPIError = { [weak self] errorKind, message in
-            self?.handleAPIError(errorKind, message: message)
+        whisperClient.onAPIError = { [weak self] failure, job in
+            self?.handleAPIError(failure, job: job)
         }
+        
+        whisperClient.onProgress = { [weak self] progress in
+            switch progress {
+            case .uploading(let fraction): self?.updateStatus(.uploading(fraction))
+            case .waitingForNetwork: self?.updateStatus(.waitingForNetwork)
+            case .processing: self?.updateStatus(.transcribing)
+            case .retrying(let attempt, let total): self?.updateStatus(.retrying(attempt, total))
+            }
+        }
+        
+        // Builds the audio pipeline without opening the microphone, so the
+        // device is ready to start the instant a key goes down.
+        audioManager.prepare()
         
         // Listen for hotkey changes
         settingsManager.hotkeyChanged = { [weak self] in
@@ -247,15 +259,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func startRecording(mode: HotkeyType) {
         let logger = DiagnosticLogger.shared
-        currentRecordingMode = mode
         let modeStr = mode == .cleanup ? "cleanup" : "normal"
         logger.info("Recording started - \(modeStr) mode", category: "Recording")
         
         // Store the currently focused app before recording starts
         clipboardUtils.storeCurrentFocusedApp()
         
-        updateMenuBarIcon(isRecording: true)
-        audioManager.startRecording()
+        updateStatus(.recording)
+        audioManager.startRecording(mode: mode)
+        
+        // Open the TLS connection while the user is still talking so the upload
+        // does not start with a handshake.
+        whisperClient.warmUpConnection()
     }
     
     private func stopRecording(mode: HotkeyType) {
@@ -264,94 +279,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Recording stopped - \(modeStr) mode", category: "Recording")
         
         // Show transcribing state immediately for user feedback
-        updateMenuBarIcon(isRecording: false, isTranscribing: true)
+        updateStatus(.transcribing)
         
-        // Stop recording - the audio manager will call onRecordingStopped callback
-        // when all audio buffers have been captured, which then triggers transcription
+        // The audio manager gathers the tail of the recording and calls back.
         audioManager.stopRecording()
     }
     
-    private func addTranscriptionToHistory(_ text: String) {
-        // Only add if it's meaningful (not empty and not just whitespace)
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedText.isEmpty || trimmedText.count < 3 {
-            return
-        }
+    private func handleAPIError(_ failure: TranscriptionFailure, job: TranscriptionJob?) {
+        DiagnosticLogger.shared.error("API error surfaced to user: \(failure.message)", category: "App")
+        showAPIError(failure, job: job)
         
-        // Check if this is a duplicate or just an extension of the most recent entry
-        if let mostRecent = settingsManager.transcriptionHistory.first {
-            // If the new text is contained in the most recent entry, don't add it
-            if mostRecent.text.contains(trimmedText) {
-                return
-            }
-            // If the new text contains the most recent entry, replace it
-            if trimmedText.contains(mostRecent.text) {
-                settingsManager.transcriptionHistory.removeFirst()
-            }
-        }
-        
-        lastTranscription = trimmedText
-        updateLastTranscriptionMenuItem()
-        settingsManager.addTranscription(trimmedText)
-        print("📚 Added to history: \(trimmedText)")
-    }
-    
-    private func showTranscriptionNotification(text: String) {
-        let notification = NSUserNotification()
-        notification.title = "MacWhisper Transcription"
-        notification.informativeText = text.count > 100 ? String(text.prefix(100)) + "..." : text
-        notification.soundName = nil // Silent notification
-        
-        NSUserNotificationCenter.default.deliver(notification)
-    }
-
-    func showNotification(title: String, body: String) {
-        // Dispatch to background thread to avoid main thread blocking
-        DispatchQueue.global(qos: .userInitiated).async {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = body
-            notification.soundName = nil
-            
-            // Post notification on main thread
-            DispatchQueue.main.async {
-                NSUserNotificationCenter.default.deliver(notification)
-            }
-        }
-    }
-    
-    private func handleAPIError(_ errorKind: APIErrorKind, message: String) {
-        let logger = DiagnosticLogger.shared
-        logger.error("API error surfaced to user: \(message)", category: "App")
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.showAPIError(errorKind, message: message)
-        }
-        
-        let notificationTitle: String
-        let notificationBody: String
-        
-        if errorKind.isBillingRelated {
-            notificationTitle = "OpenAI Credits Exhausted"
-            notificationBody = "Your API credits have run out. Top up to continue transcribing."
+        // The recording itself is still held in memory whenever a retry could
+        // work, so say so — a failure used to be a dead end that silently threw
+        // the audio away.
+        let canRetry = whisperClient.pendingRetry != nil
+        let title: String
+        let body: String
+        if failure.isBillingRelated {
+            title = "OpenAI Credits Exhausted"
+            body = "Your API credits have run out. Top up to continue transcribing."
+        } else if canRetry {
+            title = "Transcription Failed"
+            body = "\(failure.message). Your recording was kept — click the menu bar icon to retry."
         } else {
-            notificationTitle = "Transcription Failed"
-            notificationBody = message
+            title = "Transcription Failed"
+            body = failure.message
         }
         
-        showSimpleNotification(title: notificationTitle, body: notificationBody)
+        showSimpleNotification(title: title, body: body)
     }
     
-    private func showAPIError(_ errorKind: APIErrorKind, message: String) {
+    private func showAPIError(_ failure: TranscriptionFailure, job: TranscriptionJob?) {
         isInErrorState = true
         
-        let displayMessage: String
-        if errorKind.isBillingRelated {
-            displayMessage = "OpenAI credits exhausted"
-        } else {
-            let short = message.count > 50 ? String(message.prefix(50)) + "..." : message
-            displayMessage = short
-        }
+        let displayMessage = failure.isBillingRelated
+            ? "OpenAI credits exhausted"
+            : (failure.message.count > 50 ? String(failure.message.prefix(50)) + "..." : failure.message)
         
         updateStatus(.apiError(displayMessage))
         
@@ -361,7 +324,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         errorMenuItem.isHidden = false
         errorSeparator.isHidden = false
         
-        billingMenuItem.isHidden = !errorKind.isBillingRelated
+        billingMenuItem.isHidden = !failure.isBillingRelated
+        updateRetryMenuItem()
+    }
+    
+    /// The retry item tracks the parked recording, not the error banner: a
+    /// later success clears the banner but the older recording is still there
+    /// to be recovered.
+    private func updateRetryMenuItem() {
+        if let job = whisperClient.pendingRetry {
+            retryMenuItem.title = "Retry Failed Transcription (\(Int(job.duration.rounded()))s)"
+            retryMenuItem.isHidden = false
+        } else {
+            retryMenuItem.isHidden = true
+        }
+        errorSeparator.isHidden = errorMenuItem.isHidden && retryMenuItem.isHidden
     }
     
     private func clearAPIError() {
@@ -369,7 +346,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isInErrorState = false
         errorMenuItem.isHidden = true
         billingMenuItem.isHidden = true
-        errorSeparator.isHidden = true
+        updateRetryMenuItem()
+    }
+    
+    @objc private func retryTranscription() {
+        guard whisperClient.pendingRetry != nil else { return }
+        retryMenuItem.isHidden = true
+        clearAPIError()
+        updateStatus(.transcribing)
+        whisperClient.retryPending()
     }
     
     @objc private func openBilling() {
@@ -378,40 +363,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    private func handleTranscriptionComplete(_ finalTranscript: String) {
+    private func handleTranscriptionComplete(_ finalTranscript: String, job: TranscriptionJob?) {
         let logger = DiagnosticLogger.shared
         let trimmedTranscript = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         
         if trimmedTranscript.isEmpty {
             logger.warning("Transcription completed but result is empty", category: "Recording")
             if !isInErrorState {
-                DispatchQueue.main.async {
-                    self.updateStatus(.ready)
-                }
+                updateStatus(.ready)
             }
             return
         }
         
-        // Successful transcription clears any previous error state
-        DispatchQueue.main.async { [weak self] in
-            self?.clearAPIError()
-        }
+        // Successful transcription clears any previous error state. The retry
+        // item is refreshed unconditionally — clearAPIError is a no-op when no
+        // banner is showing, but a retry may still have just been consumed.
+        clearAPIError()
+        updateRetryMenuItem()
         
         logger.success("Transcription completed: \(trimmedTranscript.count) characters", category: "Recording")
         
         // Archive the raw transcription (before any AI cleanup)
-        if let sessionId = whisperClient.currentSessionId {
-            settingsManager.saveTranscriptionToArchive(text: trimmedTranscript, sessionId: sessionId)
+        if let job = job {
+            settingsManager.saveTranscriptionToArchive(text: trimmedTranscript, sessionId: job.sessionId)
         }
         
-        // Check if we need to run cleanup
-        if currentRecordingMode == .cleanup {
+        // Run cleanup if the recording was started with the cleanup hotkey. The
+        // mode travels with the job so a retry minutes later still does the
+        // right thing.
+        if job?.mode == .cleanup {
             logger.info("Cleanup mode - sending to LLM for cleanup", category: "Recording")
             
-            // Show "Cleaning up..." status
-            DispatchQueue.main.async {
-                self.updateStatus(.cleaningUp)
-            }
+            updateStatus(.cleaningUp)
             
             let prompt = settingsManager.cleanupPrompt
             let model = settingsManager.cleanupModel
@@ -428,12 +411,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func finalizeTranscription(_ text: String, wasCleanedUp: Bool) {
-        let logger = DiagnosticLogger.shared
-        
-        // Update UI on main thread - back to ready
-        DispatchQueue.main.async {
-            self.updateStatus(.ready)
-        }
+        updateStatus(.ready)
         
         // Add to history
         settingsManager.addTranscription(text)

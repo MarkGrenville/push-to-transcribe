@@ -334,9 +334,9 @@ struct HotkeySettingsView: View {
                             
                             // Cleanup Model
                             Picker("Cleanup Model:", selection: $settingsManager.cleanupModel) {
-                                Text("GPT-4o Mini (Fast)").tag("gpt-4o-mini")
-                                Text("GPT-4o (Best)").tag("gpt-4o")
-                                Text("GPT-4 Turbo").tag("gpt-4-turbo")
+                                Text("GPT-5.6 Luna (Fastest) ⚡").tag("gpt-5.6-luna")
+                                Text("GPT-5.6 Terra (Balanced)").tag("gpt-5.6-terra")
+                                Text("GPT-5.6 Sol (Best)").tag("gpt-5.6-sol")
                             }
                             .pickerStyle(MenuPickerStyle())
                             
