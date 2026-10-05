@@ -238,6 +238,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Builds the audio pipeline without opening the microphone, so the
         // device is ready to start the instant a key goes down.
         audioManager.prepare()
+        if CommandLine.arguments.contains("--mic-selftest") {
+            audioManager.runSelfTest()
+        }
         
         // Listen for hotkey changes
         settingsManager.hotkeyChanged = { [weak self] in

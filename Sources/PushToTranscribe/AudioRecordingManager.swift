@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 import AppKit
 
@@ -31,11 +32,15 @@ struct AudioClip {
 /// The microphone is opened only while a key is held, so macOS shows the orange
 /// input indicator exactly when the app is recording and at no other time.
 ///
-/// Everything that can be set up without opening the device — instantiating the
-/// input node, building the sample-rate converter, installing the tap — is done
-/// once at launch, because measurement showed none of it activates the
-/// microphone; only `AVAudioEngine.start()` does. That leaves ~160 ms between
-/// the key going down and the first block of audio arriving.
+/// Everything that can be set up without opening the device — building the
+/// input unit and the sample-rate converter — is done ahead of time; only
+/// starting the unit opens the microphone.
+///
+/// Capture is bound to a concrete device (see `InputDeviceCapture`) and
+/// re-checked against the system default on every press, on every Core Audio
+/// device notification and once a second while recording, so switching,
+/// unplugging or resetting a mic costs at most a moment of audio rather than
+/// every recording until the app is restarted.
 ///
 /// Critically, the capture gate is independent of the engine. The gate opens on
 /// key-down and everything that arrives while it is open is kept, whenever the
@@ -59,11 +64,19 @@ final class AudioRecordingManager: NSObject {
     private static let maxRecordingSeconds: Double = 300
 
     /// Only runs while a recording is open, to catch the device dying mid-press.
-    private static let healthCheckInterval: TimeInterval = 1.0
+    private static let healthCheckInterval: TimeInterval = 0.5
 
-    private var engine = AVAudioEngine()
+    /// A running unit that has delivered nothing for this long is dead.
+    private static let stallSeconds: TimeInterval = 1.0
+
+    /// Presses in a row that captured nothing because the device failed before
+    /// the app relaunches itself — a fresh process has always recovered.
+    private static let deadRecordingsBeforeRelaunch = 2
+    private static let relaunchCooldown: TimeInterval = 600
+    private static let lastRelaunchKey = "lastMicrophoneRecoveryRelaunch"
+
+    private var capture: InputDeviceCapture?
     private var converter: AVAudioConverter?
-    private var converterInputFormat: AVAudioFormat?
     private let outputFormat: AVAudioFormat
 
     /// Guards every field below it. Held only for array appends, never across a
@@ -83,7 +96,15 @@ final class AudioRecordingManager: NSObject {
     private var healthTimer: DispatchSourceTimer?
     private var hasWarnedAboutMicrophone = false
     private var hasPermission = false
-    private var lastEngineRebuild = Date.distantPast
+    private var deviceListenersInstalled = false
+    private var pendingDeviceCheck: DispatchWorkItem?
+
+    /// Set on `engineQueue` when the device failed during the open recording;
+    /// read on the main thread once it closes.
+    private let failureLock = NSLock()
+    private var deviceFailedThisRecording = false
+    /// Main thread only.
+    private var consecutiveDeadRecordings = 0
 
     /// Fired on the main queue once a recording is complete and gathered, with
     /// the mode the press was started in. The mode travels with the clip rather
@@ -110,18 +131,10 @@ final class AudioRecordingManager: NSObject {
         }
         outputFormat = format
         super.init()
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleConfigurationChange),
-            name: .AVAudioEngineConfigurationChange,
-            object: nil
-        )
     }
 
     deinit {
         healthTimer?.cancel()
-        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Lifecycle
@@ -137,7 +150,8 @@ final class AudioRecordingManager: NSObject {
                 return
             }
             self.engineQueue.async {
-                if self.prepareTap() {
+                self.installDeviceListeners()
+                if self.prepareCapture() {
                     self.logger.success("Audio pipeline ready — microphone opens only while recording", category: "Audio")
                 }
             }
@@ -172,6 +186,10 @@ final class AudioRecordingManager: NSObject {
         captured.removeAll(keepingCapacity: true)
         captured.reserveCapacity(Int(AudioRecordingManager.sampleRate * 30))
         bufferLock.unlock()
+
+        failureLock.lock()
+        deviceFailedThisRecording = false
+        failureLock.unlock()
 
         scheduleMaxDurationStop()
         startHealthTimer()
@@ -236,6 +254,7 @@ final class AudioRecordingManager: NSObject {
                              heldDuration: held)
         logger.info("Capture complete: \(String(format: "%.2f", clip.duration))s audio from a \(String(format: "%.2f", held))s press", category: "Audio")
         onRecordingFinished?(clip, mode)
+        noteRecordingOutcome(clip)
     }
 
     /// True while the gate is open.
@@ -271,99 +290,144 @@ final class AudioRecordingManager: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + AudioRecordingManager.releaseDelay, execute: release)
     }
 
-    // MARK: - Engine
+    // MARK: - Device
 
-    /// Instantiates the input node, builds the converter and installs the tap
-    /// for the current input device. None of this opens the microphone.
+    /// Makes sure `capture` is bound to the current default input with the
+    /// format it has right now, rebuilding it if anything changed. Does not open
+    /// the microphone unless it was already open for a recording.
     /// Called on `engineQueue` only.
     @discardableResult
-    private func prepareTap() -> Bool {
-        let input = engine.inputNode
-        let inputFormat = input.outputFormat(forBus: 0)
-
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            logger.error("No usable microphone (\(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch)", category: "Audio")
+    private func prepareCapture() -> Bool {
+        guard let device = AudioDevices.defaultInputDevice else {
+            logger.error("No default input device", category: "Audio")
+            tearDownCapture()
             warnAboutMicrophoneOnce()
             return false
         }
 
-        if converterInputFormat != inputFormat || converter == nil {
-            guard let made = AVAudioConverter(from: inputFormat, to: outputFormat) else {
-                logger.error("Failed to create audio converter from \(inputFormat)", category: "Audio")
-                return false
-            }
-            converter = made
-            converterInputFormat = inputFormat
-
-            input.removeTap(onBus: 0)
-            input.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { [weak self] buffer, _ in
-                self?.append(buffer)
-            }
-            logger.info("Input tap ready: \(Int(inputFormat.sampleRate))Hz, \(inputFormat.channelCount)ch", category: "Audio")
+        if let current = capture, current.deviceID == device, current.matchesDevice {
+            return true
         }
 
+        let wasRunning = capture?.isRunning ?? false
+        if let old = capture {
+            logger.info("Input device changed from \(old.deviceName) — rebinding", category: "Audio")
+        }
+        tearDownCapture()
+
+        do {
+            let made = try InputDeviceCapture(deviceID: device) { [weak self] buffer in
+                self?.append(buffer)
+            }
+            guard let madeConverter = AVAudioConverter(from: made.format, to: outputFormat) else {
+                logger.error("Failed to create audio converter from \(made.format)", category: "Audio")
+                return false
+            }
+            converter = madeConverter
+            capture = made
+            logger.info("Input ready: \(made.deviceName), \(Int(made.format.sampleRate))Hz, \(made.format.channelCount)ch", category: "Audio")
+        } catch {
+            logger.error("Could not open \(AudioDevices.name(of: device)): \(error.localizedDescription)", category: "Audio")
+            return false
+        }
+
+        if wasRunning {
+            ensureEngineRunning(reason: "device change mid-recording")
+        }
         return true
+    }
+
+    /// Called on `engineQueue` only.
+    private func tearDownCapture() {
+        capture?.stop()
+        capture = nil
+        converter = nil
     }
 
     /// Opens the microphone. Called on `engineQueue` only.
     private func ensureEngineRunning(reason: String) {
         guard hasPermission else { return }
-        guard !engine.isRunning else { return }
-        guard prepareTap() else { return }
+        guard prepareCapture(), let capture = capture else {
+            markDeviceFailure()
+            return
+        }
+        guard !capture.isRunning else { return }
 
         let began = Date()
         do {
-            try engine.start()
+            try capture.start()
             let ms = Int(Date().timeIntervalSince(began) * 1000)
-            logger.info("Microphone opened in \(ms)ms (\(reason))", category: "Audio")
+            logger.info("Microphone opened in \(ms)ms (\(reason), \(capture.deviceName))", category: "Audio")
         } catch {
-            logger.error("Failed to start audio engine: \(error.localizedDescription)", category: "Audio")
-            // A wedged engine object cannot be restarted; build a fresh one so
-            // the next attempt — or the health timer — has a clean slate.
-            rebuildEngine()
+            logger.error("Failed to open microphone: \(error.localizedDescription)", category: "Audio")
+            markDeviceFailure()
+            // Build from scratch next time — the health check retries within
+            // half a second while a recording is open.
+            tearDownCapture()
         }
     }
 
     /// Releases the microphone. Called on `engineQueue` only.
     private func stopEngine() {
-        guard engine.isRunning else { return }
-        engine.stop()
+        guard let capture = capture, capture.isRunning else { return }
+        capture.stop()
         logger.info("Microphone released", category: "Audio")
     }
 
     /// Called on `engineQueue` only.
-    private func rebuildEngine() {
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        engine = AVAudioEngine()
-        converter = nil
-        converterInputFormat = nil
+    private func markDeviceFailure() {
+        guard isRecording else { return }
+        failureLock.lock()
+        deviceFailedThisRecording = true
+        failureLock.unlock()
     }
 
-    /// The input device changed under us — mic unplugged, Bluetooth headset
-    /// connected, sample rate renegotiated. The tap's format is now stale, so
-    /// rebuild it; only reopen the microphone if a recording is actually open.
-    @objc private func handleConfigurationChange() {
-        engineQueue.async { [weak self] in
-            guard let self = self else { return }
-            // Belt and braces against a rebuild that itself provokes another
-            // change notification.
-            guard Date().timeIntervalSince(self.lastEngineRebuild) > 1.0 else { return }
-            self.lastEngineRebuild = Date()
+    /// Listens for the default input changing, devices coming and going, and
+    /// the format of any device changing. Every one of these just schedules a
+    /// re-check, so over-notifying is harmless.
+    /// Called on `engineQueue` only.
+    private func installDeviceListeners() {
+        guard !deviceListenersInstalled else { return }
+        deviceListenersInstalled = true
 
-            self.logger.warning("Audio configuration changed — rebuilding the input tap", category: "Audio")
-            self.rebuildEngine()
-            self.prepareTap()
-
-            if self.isRecording {
-                self.ensureEngineRunning(reason: "configuration change mid-recording")
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        for selector in [kAudioHardwarePropertyDefaultInputDevice, kAudioHardwarePropertyDevices] {
+            var address = AudioDevices.address(selector)
+            let status = AudioObjectAddPropertyListenerBlock(system, &address, engineQueue) { [weak self] _, _ in
+                self?.scheduleDeviceCheck()
+            }
+            if status != noErr {
+                logger.error("Could not watch audio devices: \(AudioDevices.describe(status))", category: "Audio")
             }
         }
     }
 
+    /// Coalesces a burst of device notifications — a replug fires several —
+    /// into one re-check once things settle. Called on `engineQueue` only.
+    private func scheduleDeviceCheck() {
+        pendingDeviceCheck?.cancel()
+        let check = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.pendingDeviceCheck = nil
+            if let current = self.capture,
+               current.deviceID == AudioDevices.defaultInputDevice,
+               current.matchesDevice {
+                return
+            }
+            self.logger.warning("Audio devices changed — rebinding the input", category: "Audio")
+            self.prepareCapture()
+            if self.isRecording {
+                self.ensureEngineRunning(reason: "device change mid-recording")
+            }
+        }
+        pendingDeviceCheck = check
+        engineQueue.asyncAfter(deadline: .now() + 0.2, execute: check)
+    }
+
     /// Runs only while a recording is open. Catches the device dying mid-press
-    /// — sleep/wake, a mic being unplugged — which would otherwise produce a
-    /// recording that is silently truncated at the point of failure.
+    /// — sleep/wake, a mic being unplugged, a unit that started but delivers
+    /// nothing — which would otherwise produce a recording that is silently
+    /// truncated at the point of failure.
     private func startHealthTimer() {
         guard healthTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: engineQueue)
@@ -371,8 +435,18 @@ final class AudioRecordingManager: NSObject {
                        repeating: AudioRecordingManager.healthCheckInterval)
         timer.setEventHandler { [weak self] in
             guard let self = self, self.isRecording else { return }
-            guard !self.engine.isRunning else { return }
-            self.logger.warning("Health check: microphone stopped mid-recording — reopening", category: "Audio")
+
+            if let current = self.capture, current.isRunning,
+               current.secondsSinceAudio > AudioRecordingManager.stallSeconds {
+                let cause = current.lastRenderError.map { ", render failing with \(AudioDevices.describe($0))" } ?? ""
+                self.logger.warning("Health check: no audio from \(current.deviceName) for \(String(format: "%.1f", current.secondsSinceAudio))s\(cause) — reopening", category: "Audio")
+                self.markDeviceFailure()
+                self.tearDownCapture()
+            } else if self.capture?.isRunning != true {
+                self.logger.warning("Health check: microphone not open mid-recording — reopening", category: "Audio")
+            }
+            // Also rebinds if the default device changed and the notification
+            // was missed.
             self.ensureEngineRunning(reason: "health check")
         }
         healthTimer = timer
@@ -382,6 +456,84 @@ final class AudioRecordingManager: NSObject {
     private func stopHealthTimer() {
         healthTimer?.cancel()
         healthTimer = nil
+    }
+
+    // MARK: - Last-resort recovery
+
+    /// A press that came back empty because the device failed counts towards a
+    /// relaunch. Anything that captured audio resets the count. Main thread only.
+    private func noteRecordingOutcome(_ clip: AudioClip) {
+        failureLock.lock()
+        let failed = deviceFailedThisRecording
+        failureLock.unlock()
+
+        guard clip.isEmpty, failed, clip.heldDuration > 0.5 else {
+            consecutiveDeadRecordings = 0
+            return
+        }
+        consecutiveDeadRecordings += 1
+        logger.error("Microphone failed for \(consecutiveDeadRecordings) recording(s) in a row", category: "Audio")
+
+        guard consecutiveDeadRecordings >= AudioRecordingManager.deadRecordingsBeforeRelaunch else { return }
+        relaunchToRecoverMicrophone()
+    }
+
+    /// Everything in-process has been tried by now. A new process gets a clean
+    /// Core Audio client, which has recovered every case seen so far. Rate
+    /// limited so a mic that is genuinely unusable cannot cause a relaunch loop.
+    /// Main thread only.
+    private func relaunchToRecoverMicrophone() {
+        let defaults = UserDefaults.standard
+        let last = defaults.object(forKey: AudioRecordingManager.lastRelaunchKey) as? Date ?? .distantPast
+        guard Date().timeIntervalSince(last) > AudioRecordingManager.relaunchCooldown else {
+            logger.error("Microphone still failing, but already relaunched at \(last) — not relaunching again", category: "Audio")
+            warnAboutMicrophoneOnce()
+            return
+        }
+        defaults.set(Date(), forKey: AudioRecordingManager.lastRelaunchKey)
+
+        logger.warning("Relaunching to recover the microphone", category: "Audio")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundlePath]
+        do {
+            try process.run()
+            NSApp.terminate(nil)
+        } catch {
+            logger.error("Could not relaunch: \(error.localizedDescription)", category: "Audio")
+            warnAboutMicrophoneOnce()
+        }
+    }
+
+    // MARK: - Self-test
+
+    /// Opens the microphone for a moment and logs what arrived. Used to check
+    /// the capture path from the command line, where no key can be pressed:
+    /// launch with `--mic-selftest`.
+    func runSelfTest() {
+        engineQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard self.prepareCapture(), let capture = self.capture else {
+                self.logger.error("Self-test: no capture available", category: "Audio")
+                return
+            }
+            var frames = 0
+            var peak: Float = 0
+            do {
+                let probe = try InputDeviceCapture(deviceID: capture.deviceID) { buffer in
+                    frames += Int(buffer.frameLength)
+                    if let channel = buffer.floatChannelData?[0] {
+                        for index in 0..<Int(buffer.frameLength) { peak = max(peak, abs(channel[index])) }
+                    }
+                }
+                try probe.start()
+                Thread.sleep(forTimeInterval: 1.5)
+                probe.stop()
+                self.logger.info("Self-test: \(probe.deviceName) delivered \(frames) frames in 1.5s at \(Int(probe.format.sampleRate))Hz, peak \(String(format: "%.4f", peak))", category: "Audio")
+            } catch {
+                self.logger.error("Self-test failed: \(error.localizedDescription)", category: "Audio")
+            }
+        }
     }
 
     // MARK: - Capture
@@ -460,7 +612,7 @@ final class AudioRecordingManager: NSObject {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Microphone Unavailable"
-            alert.informativeText = "Push to Transcribe could not open the microphone. If you just granted permission, restart the app."
+            alert.informativeText = "Push to Transcribe could not open the microphone. If you just granted permission or changed microphones, restart the app."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Quit & Restart")
             alert.addButton(withTitle: "Later")

@@ -48,6 +48,10 @@ class HotkeyManager {
     private var lastRemapPush = Date.distantPast
     private var lastSecureInputState = false
     private var ticksKeyLookedReleased = 0
+    /// Start time of the session the flag below belongs to.
+    private var reconciledSessionStart: Date?
+    /// Whether the window server has reported F18 as down during this session.
+    private var keyStateSeenDown = false
 
     private var wakeObservers: [NSObjectProtocol] = []
 
@@ -456,7 +460,15 @@ class HotkeyManager {
     private func reconcileWithPhysicalKey() {
         guard let open = openCapsLockSession else {
             ticksKeyLookedReleased = 0
+            reconciledSessionStart = nil
+            keyStateSeenDown = false
             return
+        }
+
+        if reconciledSessionStart != open.startedAt {
+            reconciledSessionStart = open.startedAt
+            keyStateSeenDown = false
+            ticksKeyLookedReleased = 0
         }
 
         // Give the press a moment to settle before trusting the key state.
@@ -465,10 +477,21 @@ class HotkeyManager {
             return
         }
 
-        guard !CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(CapsLockHIDRemap.f18KeyCode)) else {
+        let key = CGKeyCode(CapsLockHIDRemap.f18KeyCode)
+        let keyDown = CGEventSource.keyState(.combinedSessionState, key: key)
+            || CGEventSource.keyState(.hidSystemState, key: key)
+        if keyDown {
+            keyStateSeenDown = true
             ticksKeyLookedReleased = 0
             return
         }
+
+        // The tap swallows F18, so the window server may never record it as
+        // down at all — in which case "released" is the only thing it can ever
+        // report and says nothing about the physical key. Trust a release only
+        // once the key state has shown the key held during this session;
+        // otherwise every recording would be cut off after a few seconds.
+        guard keyStateSeenDown else { return }
 
         // Cutting a recording short mid-sentence is worse than leaving a stuck
         // one for another second, so act only on sustained disagreement rather

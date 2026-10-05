@@ -2,7 +2,6 @@
   "id": "push-to-transcribe",
   "name": "Push to Transcribe",
   "description": "Dictate into any app without leaving it, with an optional LLM pass that cleans up the transcript before pasting.",
-  "icon": "swift",
   "services": [],
   "processes": [
     {
@@ -101,11 +100,13 @@
     "owner": "MarkGrenville",
     "repo": "mac-whisper"
   },
+  "focusIdentifier": "com.example.pushtotranscribe",
   "versionSections": [
     "Features",
     "Fixes",
     "Infrastructure"
   ],
+  "favicon": "Assets/favicon/favicon-512.png",
   "intelligence": {
     "scannedAt": "2026-08-27T15:08:15Z",
     "scanVersion": 1,
@@ -114,14 +115,14 @@
     "maturity": "beta",
     "audienceType": "personal",
     "gettingStarted": [
-      "Run ./scripts/build_app.sh \u2014 it compiles, bundles, installs to /Applications, and launches the app.",
-      "Click the menu bar mic icon \u2192 Settings\u2026 \u2192 API Key and paste an OpenAI API key (stored in the macOS Keychain, not in a file).",
-      "Grant Microphone and Accessibility permissions when prompted (System Settings \u2192 Privacy & Security).",
+      "Run ./scripts/build_app.sh — it compiles, bundles, installs to /Applications, and launches the app.",
+      "Click the menu bar mic icon → Settings… → API Key and paste an OpenAI API key (stored in the macOS Keychain, not in a file).",
+      "Grant Microphone and Accessibility permissions when prompted (System Settings → Privacy & Security).",
       "Hold Caps Lock to record, release to transcribe and auto-paste; hold Option+Space to also run an LLM cleanup pass.",
       "Run ./scripts/build_and_export.sh to produce exports/PushToTranscribe.dmg for another Mac."
     ],
     "readmePath": "README.md",
-    "deploySummary": "Ships as an ad-hoc-signed DMG built on this Mac by scripts/build_and_export.sh \u2014 no CI, no notarization, no App Store.",
+    "deploySummary": "Ships as an ad-hoc-signed DMG built on this Mac by scripts/build_and_export.sh — no CI, no notarization, no App Store.",
     "techStack": {
       "languages": [
         {
@@ -174,7 +175,7 @@
         {
           "name": "IOKit.hid",
           "version": "system",
-          "role": "Caps Lock \u2192 F18 HID remap (Apple TN2450)"
+          "role": "Caps Lock → F18 HID remap (Apple TN2450)"
         },
         {
           "name": "Security (Keychain Services)",
@@ -228,7 +229,7 @@
         "rbac": false
       },
       "hosting": {
-        "platform": "local machine \u2014 distributed as a DMG",
+        "platform": "local machine — distributed as a DMG",
         "deploymentModel": "desktop binary, ad-hoc codesigned (codesign --sign -)",
         "cdn": null,
         "regions": [],
@@ -296,7 +297,7 @@
             "whisper-1 (legacy)"
           ],
           "purpose": "speech-to-text via POST https://api.openai.com/v1/audio/transcriptions (multipart WAV upload)",
-          "sdkPackage": "none \u2014 raw URLSession + hand-built multipart body"
+          "sdkPackage": "none — raw URLSession + hand-built multipart body"
         },
         {
           "provider": "OpenAI",
@@ -306,7 +307,7 @@
             "gpt-4-turbo"
           ],
           "purpose": "optional LLM cleanup pass on the transcript via POST https://api.openai.com/v1/chat/completions, temperature 0.3, max_tokens 4096, user-editable system prompt",
-          "sdkPackage": "none \u2014 raw URLSession + JSONSerialization"
+          "sdkPackage": "none — raw URLSession + JSONSerialization"
         }
       ],
       "featureFlags": [],
@@ -321,7 +322,7 @@
       "other": [
         {
           "name": "hidutil",
-          "purpose": "fallback path for the Caps Lock \u2192 F18 HID remap when the IOHIDEventSystemClient call fails",
+          "purpose": "fallback path for the Caps Lock → F18 HID remap when the IOHIDEventSystemClient call fails",
           "detected": "Process spawning /usr/bin/hidutil in CapsLockHIDRemap.swift"
         }
       ]
@@ -352,7 +353,7 @@
         {
           "name": "(none)",
           "version": "n/a",
-          "purpose": "Package.swift declares zero external dependencies \u2014 everything is Apple system frameworks, which is why there is no lockfile and builds are fully offline"
+          "purpose": "Package.swift declares zero external dependencies — everything is Apple system frameworks, which is why there is no lockfile and builds are fully offline"
         }
       ]
     },
@@ -445,7 +446,7 @@
         {
           "path": "Sources/MacWhisper/AudioRecordingManager.swift",
           "lines": 149,
-          "purpose": "DEAD CODE \u2014 leftover from the old MacWhisper target, not referenced by any target in Package.swift"
+          "purpose": "DEAD CODE — leftover from the old MacWhisper target, not referenced by any target in Package.swift"
         }
       ]
     },
@@ -456,10 +457,10 @@
       "csp": false,
       "cors": false,
       "rateLimit": false,
-      "inputValidation": "none \u2014 no user-supplied input crosses a trust boundary; API responses are parsed defensively with guard/optional chaining",
+      "inputValidation": "none — no user-supplied input crosses a trust boundary; API responses are parsed defensively with guard/optional chaining",
       "notes": [
         "Entitlements are broad for an ad-hoc-signed local app: allow-jit, allow-unsigned-executable-memory, disable-library-validation, network.client and network.server.",
-        "The app takes a CGEvent tap and synthesizes keystrokes, so it requires full Accessibility trust \u2014 a high-privilege grant on macOS.",
+        "The app takes a CGEvent tap and synthesizes keystrokes, so it requires full Accessibility trust — a high-privilege grant on macOS.",
         "Every recording is archived to disk in cleartext (WAV + transcript) under ~/Library/Application Support/PushToTranscribe/voice-archive with no retention limit, which contradicts the README's 'No Storage' claim.",
         "Bundle identifier is still the placeholder com.example.pushtotranscribe, which is also the Keychain service name and keychain-access-group."
       ]
@@ -467,21 +468,21 @@
     "conventions": {
       "codeStyle": "class-based Swift with 4-space indent, MARK: section comments, [weak self] in every escaping closure, DispatchQueue.main.async before touching UI, emoji-prefixed print/log lines",
       "namingConvention": "PascalCase types, camelCase members, manager classes suffixed -Manager, network callers suffixed -Client, stateless helpers as enums or -Utils",
-      "commitConvention": "none \u2014 short freeform imperative subjects ('Working', 'Updates', 'Update model')",
+      "commitConvention": "none — short freeform imperative subjects ('Working', 'Updates', 'Update model')",
       "branchStrategy": "single main branch, committed directly, no feature branches in history",
-      "prWorkflow": "none \u2014 pushed straight to main"
+      "prWorkflow": "none — pushed straight to main"
     },
     "agentNotes": [
       "There is no test suite, no linter, and no CI. The only verification loop is `swift build --configuration release` followed by launching the app and exercising the hotkey by hand.",
-      "The build's Info.plist source of truth is `MacWhisper.app/Contents/Info.plist` \u2014 both build scripts copy it into the new bundle. Despite `*.app/` in .gitignore this file IS tracked in git. Edit bundle metadata (version, usage strings, LSUIElement) there, not in PushToTranscribe.app/, which build_and_export.sh deletes when it finishes.",
-      "`Sources/MacWhisper/AudioRecordingManager.swift` is dead code \u2014 Package.swift only builds the PushToTranscribe target from Sources/PushToTranscribe. Do not edit it expecting an effect.",
+      "The build's Info.plist source of truth is `MacWhisper.app/Contents/Info.plist` — both build scripts copy it into the new bundle. Despite `*.app/` in .gitignore this file IS tracked in git. Edit bundle metadata (version, usage strings, LSUIElement) there, not in PushToTranscribe.app/, which build_and_export.sh deletes when it finishes.",
+      "`Sources/MacWhisper/AudioRecordingManager.swift` is dead code — Package.swift only builds the PushToTranscribe target from Sources/PushToTranscribe. Do not edit it expecting an effect.",
       "The README is stale: it describes the old MacWhisper app name, a Control+Space default hotkey, an API key hardcoded in AppDelegate, and 1-second chunked streaming. Reality is Caps Lock push-to-talk, a Keychain-stored key set in Settings, and one upload of the whole utterance on key release. `scripts/run.sh` and `scripts/test_hotkeys.sh` still point at MacWhisper paths that no longer exist and will fail.",
-      "Caps Lock push-to-talk works by remapping Caps Lock to F18 at the HID level (CapsLockHIDRemap.apply). This is a SYSTEM-WIDE change. The app restores it in applicationWillTerminate, but a crash or force-quit leaves Caps Lock dead \u2014 run the 'Restore Caps Lock' script (`hidutil property --set '{\"UserKeyMapping\":[]}'`) to fix it.",
-      "After each rebuild macOS often invalidates the Accessibility grant because the executable changed. If hotkeys or auto-paste silently stop, remove PushToTranscribe from System Settings \u2192 Privacy & Security \u2192 Accessibility, re-add /Applications/PushToTranscribe.app, and relaunch.",
+      "Caps Lock push-to-talk works by remapping Caps Lock to F18 at the HID level (CapsLockHIDRemap.apply). This is a SYSTEM-WIDE change. The app restores it in applicationWillTerminate, but a crash or force-quit leaves Caps Lock dead — run the 'Restore Caps Lock' script (`hidutil property --set '{\"UserKeyMapping\":[]}'`) to fix it.",
+      "After each rebuild macOS often invalidates the Accessibility grant because the executable changed. If hotkeys or auto-paste silently stop, remove PushToTranscribe from System Settings → Privacy & Security → Accessibility, re-add /Applications/PushToTranscribe.app, and relaunch.",
       "Two hotkeys exist: the primary push-to-talk (default Caps Lock, hold to record) and a cleanup hotkey (default Option+Space) that routes the transcript through LLMClient with a user-editable prompt before pasting.",
       "Transcription model IDs live in three places that must stay in sync: the SettingsManager default, the SettingsView picker tags, and the language-parameter branch in WhisperClient (gpt-transcribe sends `languages` as an array; older models send `language` as a string).",
-      "This is a menu bar app (LSUIElement, .accessory policy) with no ports, no server, and no dev server. The one Nomad process runs the installed bundle executable directly so stdout logging is visible; the Diagnostics settings tab shows the same log in-app.",
-      "Use the Nomad process log (`nomad proc logs -k <id> -n 80`) to read startup, permission, hotkey-registration, and OpenAI request/response lines \u2014 every manager logs through the shared DiagnosticLogger."
+      "This is a menu bar app (LSUIElement, .accessory policy) with no ports, no server, and no dev server. The one Nocturnal process runs the installed bundle executable directly so stdout logging is visible; the Diagnostics settings tab shows the same log in-app.",
+      "Use the Nocturnal process log (`noc logs <id> -n 80`) to read startup, permission, hotkey-registration, and OpenAI request/response lines — every manager logs through the shared DiagnosticLogger."
     ]
   }
 }
